@@ -1,0 +1,31 @@
+[package]
+name = "esphome-device"
+version = "0.1.0"
+edition = "2021"
+description = "ESPHome API client for Rust."
+repository = "https://github.com/variegated-coffee/esphome-device-rs"
+license = "MIT"
+
+[lib]
+name = "esphome_device"
+path = "src/lib.rs"
+
+[dependencies]
+femtopb = { version = "0.8.0", features = ["thiserror"] }
+anyhow = { version = "1.0.0" }
+log = "0.4.27"
+
+embassy-net = { version = "0.7.0", features = ["tcp", "proto-ipv4", "medium-ip", "dhcpv4"], optional = true }
+async-io = "2.4.0"
+futures = "0.3.31"
+async-std = "1.13.1"
+async-trait = "0.1.88"
+env_logger = "0.11.8"
+
+[build-dependencies]
+femtopb-build = "0.8.0"
+anyhow = { version = "1.0.0" }
+
+[features]
+default = []
+embassy_net = ["embassy-net"]
