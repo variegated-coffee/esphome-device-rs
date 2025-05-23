@@ -21,6 +21,7 @@ futures = "0.3.31"
 async-std = "1.13.1"
 async-trait = "0.1.88"
 env_logger = "0.11.8"
+embassy-sync = "0.6.2"
 
 [build-dependencies]
 femtopb-build = "0.8.0"

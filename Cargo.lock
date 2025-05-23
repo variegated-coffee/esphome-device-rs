@@ -470,6 +470,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "embassy-net",
+ "embassy-sync",
  "env_logger",
  "femtopb",
  "femtopb-build",

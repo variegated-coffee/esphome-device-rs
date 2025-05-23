@@ -1,154 +1,32 @@
 use std::net::TcpListener;
-use anyhow::{format_err, Result};
-use esphome_device::{
-    api::{
-        HelloRequest, HelloResponse, PingRequest, PingResponse, DeviceInfoRequest, DeviceInfoResponse,
-        ConnectRequest, ConnectResponse, DisconnectRequest, DisconnectResponse
-    },
-    ApiConnection,
-};
+use std::ops::DerefMut;
+use anyhow::{anyhow, format_err, Result};
+use esphome_device::{api::{
+    HelloRequest, HelloResponse, PingRequest, PingResponse, DeviceInfoRequest, DeviceInfoResponse,
+    ConnectRequest, ConnectResponse, DisconnectRequest, DisconnectResponse
+}, ApiConnection, BinarySensorConfig, BinarySensorState, Command, DeviceConfig, EntityConfig, StateChange, SwitchConfig, SwitchState};
 use async_std::task;
-use std::sync::Arc;
-use std::time::Duration;
 use async_io::Async;
+use async_std::channel::{Sender, Receiver};
 use femtopb::EnumValue::Known;
-use femtopb::UnknownFields;
-use esphome_device::api::{AlarmControlPanelCommandRequest, BluetoothConnectionsFreeResponse, BluetoothDeviceRequest, BluetoothGattGetServicesRequest, BluetoothGattNotifyRequest, BluetoothGattReadDescriptorRequest, BluetoothGattReadRequest, BluetoothGattWriteDescriptorRequest, BluetoothGattWriteRequest, BluetoothScannerSetModeRequest, ButtonCommandRequest, CameraImageRequest, ClimateCommandRequest, CoverCommandRequest, DateCommandRequest, DateTimeCommandRequest, ExecuteServiceRequest, FanCommandRequest, GetTimeRequest, GetTimeResponse, LightCommandRequest, ListEntitiesRequest, LockCommandRequest, LogLevel, MediaPlayerCommandRequest, NoiseEncryptionSetKeyRequest, NoiseEncryptionSetKeyResponse, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, SubscribeBluetoothConnectionsFreeRequest, SubscribeBluetoothLeAdvertisementsRequest, SubscribeHomeAssistantStatesRequest, SubscribeHomeassistantServicesRequest, SubscribeLogsRequest, SubscribeLogsResponse, SubscribeStatesRequest, SubscribeVoiceAssistantRequest, SwitchCommandRequest, TextCommandRequest, TimeCommandRequest, UnsubscribeBluetoothLeAdvertisementsRequest, UpdateCommandRequest, ValveCommandRequest, VoiceAssistantConfigurationRequest, VoiceAssistantConfigurationResponse, VoiceAssistantSetConfiguration};
-use esphome_device::std::server::EspHomeServer;
-
-/// Basic ApiConnection implementation that responds to hello and ping messages
-#[derive(Clone)]
-struct BasicApiService {
-    name: String,
-    version: String,
-}
-
-#[async_trait::async_trait]
-impl ApiConnection for BasicApiService {
-    async fn receive_states_task(&self) -> Result<()> {
-        loop {
-            // Simulate receiving states
-            println!("Receiving states...");
-            task::sleep(Duration::from_secs(10)).await;
-            
-            
-        }
-    }
-
-    async fn hello<'a>(&self, request: HelloRequest<'a>) -> Result<HelloResponse<'_>> {
-        println!("Received hello from client");
-        
-        // Create a simple hello response
-        Ok(HelloResponse {
-            api_version_major: 1,
-            api_version_minor: 5,
-            server_info: "ESPHome Device Server".into(),
-            name: "Hello from ESPHome".into(),
-            unknown_fields: UnknownFields::default(),
-        })
-    }
-
-    async fn device_info<'a>(&self, request: DeviceInfoRequest<'a>) -> Result<DeviceInfoResponse> {
-        println!("Received device info request");
-        
-        // Create a simple device info response
-        Ok(DeviceInfoResponse {
-            uses_password: false,
-            name: "Some Name".into(),
-            mac_address: "00:00:00:00:00:00".into(),
-            esphome_version: "1.0.0".into(),
-            compilation_time: "2023-10-01T00:00:00Z".into(),
-            model: "Some Model".into(),
-            has_deep_sleep: false,
-            project_name: "Some Project".into(),
-            project_version: "1.0.0".into(),
-            webserver_port: 80,
-            legacy_bluetooth_proxy_version: 0,
-            bluetooth_proxy_feature_flags: 0,
-            manufacturer: "Some Manufacturer".into(),
-            friendly_name: "Some Friendly Name".into(),
-            legacy_voice_assistant_version: 0,
-            voice_assistant_feature_flags: 0,
-            suggested_area: "Nowhere".into(),
-            bluetooth_mac_address: "00:00:00:00:00:00".into(),
-            api_encryption_supported: false,
-            unknown_fields: Default::default(),
-        })
-    }
-
-    async fn connect<'a>(&self, request: ConnectRequest<'a>) -> Result<ConnectResponse> {
-        println!("Received connect request, password: {}", request.password);
-        
-        // Create a simple connect response
-        Ok(ConnectResponse {
-            invalid_password: false,
-            unknown_fields: UnknownFields::default(),
-        })
-    }
-
-    async fn disconnect<'a>(&self, request: DisconnectRequest<'a>) -> Result<DisconnectResponse> {
-        println!("Received disconnect request");
-        
-        // Create a simple disconnect response
-        Ok(DisconnectResponse {
-            unknown_fields: UnknownFields::default(),
-        })
-    }
-
-    async fn ping<'a>(&self, request: PingRequest<'a>) -> Result<PingResponse> {
-        println!("Received ping request");
-        
-        // Create a simple ping response
-        Ok(PingResponse {
-            unknown_fields: UnknownFields::default(),
-        })
-    }
-
-    async fn subscribe_states<'a>(&self, request: SubscribeStatesRequest<'a>) -> Result<()> {
-        println!("Received subscribe states request");
-        Ok(())
-    }
-
-    async fn subscribe_logs<'a>(&self, request: SubscribeLogsRequest<'a>) -> Result<SubscribeLogsResponse> {
-        println!("Received subscribe logs request");
-        
-        // Create a simple subscribe logs response
-        Ok(SubscribeLogsResponse {
-            level: Known(LogLevel::Info),
-            message: &[0xDE,0xAD,0xBE,0xEF],
-            send_failed: false,
-            unknown_fields: UnknownFields::default(),
-        })
-    }
-
-    async fn subscribe_homeassistant_services<'a>(&self, request: SubscribeHomeassistantServicesRequest<'a>) -> Result<()> {
-        println!("Received subscribe homeassistant services request");
-        
-        Ok(())
-    }
-
-    async fn subscribe_home_assistant_states<'a>(&self, request: SubscribeHomeAssistantStatesRequest<'a>) -> Result<()> {
-        println!("Received subscribe homeassistant states request");
-        Ok(())
-    }
-}
+use femtopb::{EnumValue, Message, UnknownFields};
+use futures::join;
+use log::log;
+use esphome_device::api::{AlarmControlPanelCommandRequest, BinarySensorStateResponse, BluetoothConnectionsFreeResponse, BluetoothDeviceRequest, BluetoothGattGetServicesRequest, BluetoothGattNotifyRequest, BluetoothGattReadDescriptorRequest, BluetoothGattReadRequest, BluetoothGattWriteDescriptorRequest, BluetoothGattWriteRequest, BluetoothScannerSetModeRequest, ButtonCommandRequest, CameraImageRequest, ClimateCommandRequest, ColorMode, CoverCommandRequest, CoverOperation, CoverStateResponse, DateCommandRequest, DateTimeCommandRequest, EntityCategory, ExecuteServiceRequest, FanCommandRequest, FanDirection, GetTimeRequest, GetTimeResponse, LegacyCoverState, LightCommandRequest, ListEntitiesBinarySensorResponse, ListEntitiesDoneResponse, ListEntitiesRequest, LockCommandRequest, LogLevel, MediaPlayerCommandRequest, NoiseEncryptionSetKeyRequest, NoiseEncryptionSetKeyResponse, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, SubscribeBluetoothConnectionsFreeRequest, SubscribeBluetoothLeAdvertisementsRequest, SubscribeHomeAssistantStatesRequest, SubscribeHomeassistantServicesRequest, SubscribeLogsRequest, SubscribeLogsResponse, SubscribeStatesRequest, SubscribeVoiceAssistantRequest, SwitchCommandRequest, TextCommandRequest, TimeCommandRequest, UnsubscribeBluetoothLeAdvertisementsRequest, UpdateCommandRequest, ValveCommandRequest, VoiceAssistantConfigurationRequest, VoiceAssistantConfigurationResponse, VoiceAssistantSetConfiguration};
+use esphome_device::std::server::{EspHomeConnection, EspHomeServer};
+use esphome_device::server::ConnectionStatus;
+use esphome_device::metadata::MessageType;
 
 fn main() -> Result<()> {
-    env_logger::init();
-    
-    // Create our API service
-    let service = BasicApiService {
-        name: "Basic Test Server".into(),
-        version: "1.0.0".into(),
-    };
-    
+    use env_logger::Env;
+
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     // Create and run the server
     task::block_on(async {
         println!("Starting ESPHome server on 0.0.0.0:6053");
-        
-        let mut server = esphome_device::std::server::EspHomeServer::new(service);
-        
-        if let Err(e) = run(&mut server, "0.0.0.0", 6053).await {
+
+        if let Err(e) = run("0.0.0.0", 6053).await {
             eprintln!("Server error: {}", e);
         }
         
@@ -156,14 +34,65 @@ fn main() -> Result<()> {
     })
 }
 
+static ENTITY_CONFIGS: &[EntityConfig] = &[
+    EntityConfig::Switch(SwitchConfig {
+        object_id: "switch",
+        key: 2,
+        name: "Test Switch",
+        unique_id: "test_switch",
+        icon: "",
+        assumed_state: false,
+        disabled_by_default: false,
+        entity_category: EntityCategory::Config,
+        device_class: "",
+    }),
+    EntityConfig::BinarySensor(BinarySensorConfig {
+        object_id: "binary_sensor",
+        key: 1,
+        name: "Test Binary Sensor",
+        unique_id: "test_binary_sensor",
+        device_class: "motion",
+        is_status_binary_sensor: false,
+        disabled_by_default: false,
+        icon: "mdi:home",
+        entity_category: EntityCategory::None,
+    }),
+];
+
+static DEVICE_CONFIG: &DeviceConfig = &DeviceConfig {
+    name: "Test Device",
+    password: None,
+    mac_address: "",
+    esphome_version: "",
+    compilation_time: "",
+    model: "",
+    has_deep_sleep: false,
+    project_name: "",
+    project_version: "",
+    webserver_port: 0,
+    legacy_bluetooth_proxy_version: 0,
+    bluetooth_proxy_feature_flags: 0,
+    manufacturer: "",
+    friendly_name: "",
+    legacy_voice_assistant_version: 0,
+    voice_assistant_feature_flags: 0,
+    suggested_area: "",
+    bluetooth_mac_address: "",
+};
+
 /// Start the server
-pub async fn run(server: &mut EspHomeServer<BasicApiService>, address: &str, port: u16) -> Result<()> {
+pub async fn run(address: &str, port: u16) -> Result<()> {
     let addr = format!("{}:{}", address, port);
     let listener = TcpListener::bind(&addr)
         .map_err(|e| format_err!("Failed to bind to {}: {}", addr, e))?;
 
     let async_listener = Async::new(listener)
         .map_err(|e| format_err!("Failed to create async listener: {}", e))?;
+
+    let (state_change_sender, state_change_receiver) = async_std::channel::unbounded();
+    let (command_sender, command_receiver) = async_std::channel::unbounded();
+
+    async_std::task::spawn(sensor_states_task(state_change_sender, command_receiver));
 
     loop {
         // Accept a new connection
@@ -172,7 +101,40 @@ pub async fn run(server: &mut EspHomeServer<BasicApiService>, address: &str, por
 
         log::info!("Accepted connection from {}", peer_addr);
 
-        let e = server.handle(stream).await
-            .map_err(|e| format_err!("Connection error: {}", e));
+        let conn = EspHomeConnection::new(stream);
+        let mut server = EspHomeServer::new(conn, DEVICE_CONFIG, ENTITY_CONFIGS, state_change_receiver.clone(), command_sender.clone());
+        let server_task = async_std::task::spawn(async move {
+            if let Err(e) = server.run().await {
+                log::error!("Server error: {}", e);
+            }
+        });
+    }
+}
+
+pub async fn sensor_states_task(sender: Sender<StateChange<'_>>, command_receiver: Receiver<Command>) {
+    let mut state = false;
+    loop {
+        // Wait for a command 
+        let command = command_receiver.recv().await.unwrap();
+
+        match command {
+            Command::SwitchCommand(data) => {
+                log::info!("Switch command received, setting states to {}", data.state);
+                state = data.state;
+            }
+            _ => {}
+        }
+
+        // Simulate sending state changes
+        let _ = sender.send(StateChange::BinarySensorChange(BinarySensorState {
+            key: 1,
+            state,
+            missing_state: false
+        })).await;
+
+        let _ = sender.send(StateChange::SwitchStateChange(SwitchState {
+            key: 2,
+            state,
+        })).await;
     }
 }
