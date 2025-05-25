@@ -1,6 +1,6 @@
 use std::net::TcpStream;
 use async_io::Async;
-use futures::{AsyncReadExt, AsyncWriteExt, FutureExt};
+use futures::{AsyncReadExt};
 use anyhow::{Result, anyhow};
 use alloc::vec::Vec;
 use futures::io::ReadHalf;

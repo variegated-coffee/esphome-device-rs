@@ -24,4 +24,3 @@ firmwares.
 
 It also doesn't aim to support all features of the ESPHome protocol. Most notably,
 I'm not going to be implementing any Bluetooth or Voice Assistant features.
-

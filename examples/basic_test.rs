@@ -4,7 +4,7 @@ use anyhow::{anyhow, format_err, Result};
 use esphome_device::{api::{
     HelloRequest, HelloResponse, PingRequest, PingResponse, DeviceInfoRequest, DeviceInfoResponse,
     ConnectRequest, ConnectResponse, DisconnectRequest, DisconnectResponse
-}, ApiConnection, BinarySensorConfig, BinarySensorState, Command, DeviceConfig, EntityConfig, StateChange, SwitchConfig, SwitchState};
+}, BinarySensorConfig, BinarySensorState, ClientEvent, Command, DeviceConfig, EntityConfig, StateChange};
 use async_std::task;
 use async_io::Async;
 use async_std::channel::{Sender, Receiver};
@@ -13,8 +13,9 @@ use femtopb::{EnumValue, Message, UnknownFields};
 use futures::join;
 use log::log;
 use esphome_device::api::{AlarmControlPanelCommandRequest, BinarySensorStateResponse, BluetoothConnectionsFreeResponse, BluetoothDeviceRequest, BluetoothGattGetServicesRequest, BluetoothGattNotifyRequest, BluetoothGattReadDescriptorRequest, BluetoothGattReadRequest, BluetoothGattWriteDescriptorRequest, BluetoothGattWriteRequest, BluetoothScannerSetModeRequest, ButtonCommandRequest, CameraImageRequest, ClimateCommandRequest, ColorMode, CoverCommandRequest, CoverOperation, CoverStateResponse, DateCommandRequest, DateTimeCommandRequest, EntityCategory, ExecuteServiceRequest, FanCommandRequest, FanDirection, GetTimeRequest, GetTimeResponse, LegacyCoverState, LightCommandRequest, ListEntitiesBinarySensorResponse, ListEntitiesDoneResponse, ListEntitiesRequest, LockCommandRequest, LogLevel, MediaPlayerCommandRequest, NoiseEncryptionSetKeyRequest, NoiseEncryptionSetKeyResponse, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, SubscribeBluetoothConnectionsFreeRequest, SubscribeBluetoothLeAdvertisementsRequest, SubscribeHomeAssistantStatesRequest, SubscribeHomeassistantServicesRequest, SubscribeLogsRequest, SubscribeLogsResponse, SubscribeStatesRequest, SubscribeVoiceAssistantRequest, SwitchCommandRequest, TextCommandRequest, TimeCommandRequest, UnsubscribeBluetoothLeAdvertisementsRequest, UpdateCommandRequest, ValveCommandRequest, VoiceAssistantConfigurationRequest, VoiceAssistantConfigurationResponse, VoiceAssistantSetConfiguration};
-use esphome_device::std::server::{EspHomeConnection, EspHomeServer};
-use esphome_device::server::ConnectionStatus;
+use esphome_device::entity_type::switch::{SwitchConfig, SwitchState};
+use esphome_device::std::server::{EspHomeConnection};
+use esphome_device::server::{ConnectionStatus, EspHomeServer};
 use esphome_device::metadata::MessageType;
 
 fn main() -> Result<()> {
@@ -111,14 +112,14 @@ pub async fn run(address: &str, port: u16) -> Result<()> {
     }
 }
 
-pub async fn sensor_states_task(sender: Sender<StateChange<'_>>, command_receiver: Receiver<Command>) {
+pub async fn sensor_states_task(sender: Sender<StateChange<'_>>, client_event_receiver: Receiver<ClientEvent>) {
     let mut state = false;
     loop {
         // Wait for a command 
-        let command = command_receiver.recv().await.unwrap();
-
+        let command = client_event_receiver.recv().await.unwrap();
+        
         match command {
-            Command::SwitchCommand(data) => {
+            ClientEvent::CommandReceived(Command::SwitchCommand(data)) => {
                 log::info!("Switch command received, setting states to {}", data.state);
                 state = data.state;
             }
