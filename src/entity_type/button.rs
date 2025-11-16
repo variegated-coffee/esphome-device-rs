@@ -15,7 +15,7 @@ impl<'a> From<ButtonCommandRequest<'a>> for ButtonCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ButtonConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

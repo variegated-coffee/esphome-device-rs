@@ -29,7 +29,7 @@ pub mod std;
 pub mod server;
 pub mod entity_type;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DeviceConfig<'a> {
     pub name: &'a str,
     pub password: Option<&'a str>,
@@ -104,6 +104,7 @@ pub enum Command {
     DateTimeCommand(DateTimeCommandData),
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub enum EntityConfig<'a> {
     BinarySensor(BinarySensorConfig<'a>),
     Sensor(SensorConfig<'a>),

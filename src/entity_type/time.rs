@@ -21,7 +21,7 @@ impl<'a> From<TimeCommandRequest<'a>> for TimeCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TimeConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

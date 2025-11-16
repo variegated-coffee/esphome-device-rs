@@ -2,7 +2,7 @@ use femtopb::EnumValue::Known;
 use femtopb::UnknownFields;
 use crate::api::{EntityCategory, ListEntitiesSwitchResponse, SwitchCommandRequest, SwitchStateResponse};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SwitchState {
     pub key: u32,
     pub state: bool,
@@ -33,6 +33,7 @@ impl From<SwitchCommandRequest<'_>> for SwitchCommandData {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct SwitchConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

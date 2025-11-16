@@ -2,7 +2,7 @@ use femtopb::EnumValue::Known;
 use femtopb::UnknownFields;
 use crate::api::{BinarySensorStateResponse, EntityCategory, ListEntitiesBinarySensorResponse};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct BinarySensorState {
     pub key: u32,
     pub state: bool,
@@ -20,6 +20,7 @@ impl<'a> Into<BinarySensorStateResponse<'a>> for BinarySensorState {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct BinarySensorConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

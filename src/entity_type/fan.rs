@@ -12,6 +12,7 @@ pub struct FanState<'a> {
     pub preset_mode: &'a str,
 }
 
+#[allow(deprecated)]
 impl<'a> Into<FanStateResponse<'a>> for FanState<'a> {
     fn into(self) -> FanStateResponse<'a> {
         let speed = if self.speed_level < 33 {
@@ -45,6 +46,7 @@ pub struct FanCommandData {
     pub preset_mode: Option<String>,
 }
 
+#[allow(deprecated)]
 impl<'a> From<FanCommandRequest<'a>> for FanCommandData {
     fn from(request: FanCommandRequest<'a>) -> Self {
         let speed_level = if request.has_speed_level {
@@ -82,6 +84,7 @@ impl<'a> From<FanCommandRequest<'a>> for FanCommandData {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct FanConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

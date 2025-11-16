@@ -1,7 +1,6 @@
 use femtopb::EnumValue::Known;
 use femtopb::{EnumValue, Packed, Repeated, UnknownFields};
 use crate::api::{ColorMode, EntityCategory, LightCommandRequest, LightStateResponse, ListEntitiesLightResponse};
-use crate::api::ColorMode::Unknown;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct LightState<'a> {
@@ -39,7 +38,7 @@ impl<'a> Into<LightStateResponse<'a>> for LightState<'a> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct RgbColor {
     pub red: f32,
     pub green: f32,
@@ -100,6 +99,7 @@ impl<'a> From<LightCommandRequest<'a>> for LightCommandData {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct LightConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,
@@ -114,6 +114,7 @@ pub struct LightConfig<'a> {
     pub entity_category: EntityCategory,
 }
 
+#[allow(deprecated)]
 impl<'a> Into<ListEntitiesLightResponse<'a>> for &LightConfig<'a> {
     fn into(self) -> ListEntitiesLightResponse<'a> {
         let legacy_supports_brightness = self.supported_color_modes.contains(&Known(ColorMode::Brightness));

@@ -22,7 +22,7 @@ impl<'a> From<AlarmControlPanelCommandRequest<'a>> for AlarmControlPanelCommandD
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct AlarmControlPanelConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

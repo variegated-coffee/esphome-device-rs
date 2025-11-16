@@ -59,6 +59,7 @@ impl<'a> From<CoverCommandRequest<'a>> for CoverCommandData {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct CoverConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

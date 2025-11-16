@@ -17,7 +17,7 @@ impl<'a> From<TextCommandRequest<'a>> for TextCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TextConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

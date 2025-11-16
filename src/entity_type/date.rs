@@ -21,7 +21,7 @@ impl<'a> From<DateCommandRequest<'a>> for DateCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct DateConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

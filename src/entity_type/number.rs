@@ -17,7 +17,7 @@ impl<'a> From<NumberCommandRequest<'a>> for NumberCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NumberConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

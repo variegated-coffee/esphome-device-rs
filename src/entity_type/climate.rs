@@ -61,7 +61,7 @@ impl<'a> From<ClimateCommandRequest<'a>> for ClimateCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ClimateConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

@@ -26,7 +26,7 @@ impl<'a> From<LockCommandRequest<'a>> for LockCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct LockConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

@@ -20,6 +20,7 @@ impl<'a> Into<TextSensorStateResponse<'a>> for TextSensorState<'a> {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct TextSensorConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

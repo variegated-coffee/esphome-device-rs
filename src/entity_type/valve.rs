@@ -19,7 +19,7 @@ impl<'a> From<ValveCommandRequest<'a>> for ValveCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ValveConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

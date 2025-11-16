@@ -2,7 +2,7 @@ use femtopb::EnumValue::Known;
 use femtopb::{Repeated, UnknownFields};
 use crate::api::{EntityCategory, EventResponse, ListEntitiesEventResponse};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct EventConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

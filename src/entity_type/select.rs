@@ -17,7 +17,7 @@ impl<'a> From<SelectCommandRequest<'a>> for SelectCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SelectConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

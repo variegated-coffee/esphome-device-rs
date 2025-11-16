@@ -25,7 +25,7 @@ impl<'a> From<SirenCommandRequest<'a>> for SirenCommandData {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SirenConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

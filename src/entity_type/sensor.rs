@@ -9,6 +9,24 @@ pub struct SensorState {
     pub missing_state: bool,
 }
 
+impl SensorState {
+    pub fn new(key: u32, state: Option<f32>) -> Self {
+        if let Some(state) = state {
+            Self {
+                key,
+                state,
+                missing_state: false,
+            }
+        } else {
+            Self {
+                key,
+                state: 0.0,
+                missing_state: true,
+            }
+        }
+    }
+}
+
 impl<'a> Into<SensorStateResponse<'a>> for SensorState {
     fn into(self) -> SensorStateResponse<'a> {
         SensorStateResponse {
@@ -20,6 +38,7 @@ impl<'a> Into<SensorStateResponse<'a>> for SensorState {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct SensorConfig<'a> {
     pub object_id: &'a str,
     pub key: u32,

@@ -24,15 +24,29 @@ pub struct EspHomeServer<'a, 's> {
     entity_configs: &'a[EntityConfig<'a>],
 }
 
-macro_rules! handle_command {
-    ($command:expr, $request_type:ty) => {
-        self.client_event_channel.send(
-            $command(
-                <$request_type>::decode(&data)
-                    .map_err(|e| anyhow!(e))?
-                    .into()
+macro_rules! handle_command_request {
+    ($self:expr, $data:expr, $command_variant:ident, $request_type:ty) => {
+        $self.client_event_channel.send(
+            ClientEvent::CommandReceived(
+                Command::$command_variant(
+                    <$request_type>::decode($data)
+                        .map_err(|e| anyhow!(e))?
+                        .into()
+                )
             )
         ).await?
+    };
+}
+
+macro_rules! handle_state_change {
+    ($self:expr, $state:expr, $response_type:ty, $msg_type:expr) => {
+        $self.send::<$response_type>($msg_type, &$state.into()).await?
+    };
+}
+
+macro_rules! handle_list_entity {
+    ($self:expr, $config:expr, $response_type:ty, $msg_type:expr) => {
+        $self.send::<$response_type>($msg_type, &$config.into()).await?
     };
 }
 
@@ -62,7 +76,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
     }
 
     async fn send<'m, M: Message<'m>>(&self, msg_type: MessageType, message: &'m M) -> anyhow::Result<()> {
-        log::info!("Sending message of type {:?}", msg_type);
+        log::debug!("Sending message of type {:?}", msg_type);
         self.connection.send(msg_type, message).await
     }
 
@@ -77,71 +91,70 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             let state_change = self.state_change_channel.recv().await?;
 
             let status = self.connection.status.lock().await;
-            if !status.subscribed_to_states {
+/*            if !status.subscribed_to_states {
                 log::warn!("Not subscribed to states, skipping state change");
                 continue;
-            }
+            }*/
 
-            log::info!("State change received");
+            //log::info!("State change received");
 
             match state_change {
-                StateChange::BinarySensorChange(state) => {
-                    self.send::<BinarySensorStateResponse>(MessageType::BinarySensorStateResponse, &state.into()).await?;
-                }
-                StateChange::CoverChange(state) => {
-                    self.send::<CoverStateResponse>(MessageType::CoverStateResponse, &state.into()).await?;
-                }
-                StateChange::SwitchStateChange(state) => {
-                    self.send::<SwitchStateResponse>(MessageType::SwitchStateResponse, &state.into()).await?;
-                }
-                StateChange::FanStateChange(state) => {
-                    self.send::<FanStateResponse>(MessageType::FanStateResponse, &state.into()).await?;
-                }
-                StateChange::LightStateChange(state) => {
-                    self.send::<LightStateResponse>(MessageType::LightStateResponse, &state.into()).await?;
-                }
-                StateChange::SensorStateChange(state) => {
-                    self.send::<SensorStateResponse>(MessageType::SensorStateResponse, &state.into()).await?;
-                }
-                StateChange::TextSensorStateChange(state) => {
-                    self.send::<TextSensorStateResponse>(MessageType::TextSensorStateResponse, &state.into()).await?;
-                },
-                StateChange::NumberStateChange(state) => {
-                    self.send::<NumberStateResponse>(MessageType::NumberStateResponse, &state.into()).await?;
-                }
-                StateChange::SelectStateChange(state) => {
-                    self.send::<SelectStateResponse>(MessageType::SelectStateResponse, &state.into()).await?;
-                }
-                StateChange::SirenStateChange(state) => {
-                    self.send::<SirenStateResponse>(MessageType::SirenStateResponse, &state.into()).await?;
-                }
-                StateChange::LockStateChange(state) => {
-                    self.send::<LockStateResponse>(MessageType::LockStateResponse, &state.into()).await?;
-                }
-                StateChange::AlarmControlPanelStateChange(state) => {
-                    self.send::<AlarmControlPanelStateResponse>(MessageType::AlarmControlPanelStateResponse, &state.into()).await?;
-                }
-                StateChange::TextStateChange(state) => {
-                    self.send::<TextStateResponse>(MessageType::TextStateResponse, &state.into()).await?;
-                }
-                StateChange::DateStateChange(state) => {
-                    self.send::<DateStateResponse>(MessageType::DateStateResponse, &state.into()).await?;
-                }
-                StateChange::TimeStateChange(state) => {
-                    self.send::<TimeStateResponse>(MessageType::TimeStateResponse, &state.into()).await?;
-                }
-                StateChange::EventStateChange(state) => {
-                    self.send::<EventResponse>(MessageType::EventResponse, &state.into()).await?;
-                }
-                StateChange::ValveStateChange(state) => {
-                    self.send::<ValveStateResponse>(MessageType::ValveStateResponse, &state.into()).await?;
-                }
-                StateChange::DateTimeStateChange(state) => {
-                    self.send::<DateTimeStateResponse>(MessageType::DateTimeStateResponse, &state.into()).await?;
-                }
-                StateChange::ClimateStateChange(state) => {
-                    self.send::<ClimateStateResponse>(MessageType::ClimateStateResponse, &state.into()).await?;
-                }
+                StateChange::BinarySensorChange(state) => 
+                    handle_state_change!(self, state, BinarySensorStateResponse, MessageType::BinarySensorStateResponse),
+                
+                StateChange::CoverChange(state) => 
+                    handle_state_change!(self, state, CoverStateResponse, MessageType::CoverStateResponse),
+                
+                StateChange::SwitchStateChange(state) => 
+                    handle_state_change!(self, state, SwitchStateResponse, MessageType::SwitchStateResponse),
+                
+                StateChange::FanStateChange(state) => 
+                    handle_state_change!(self, state, FanStateResponse, MessageType::FanStateResponse),
+                
+                StateChange::LightStateChange(state) => 
+                    handle_state_change!(self, state, LightStateResponse, MessageType::LightStateResponse),
+                
+                StateChange::SensorStateChange(state) => 
+                    handle_state_change!(self, state, SensorStateResponse, MessageType::SensorStateResponse),
+                
+                StateChange::TextSensorStateChange(state) => 
+                    handle_state_change!(self, state, TextSensorStateResponse, MessageType::TextSensorStateResponse),
+                
+                StateChange::NumberStateChange(state) => 
+                    handle_state_change!(self, state, NumberStateResponse, MessageType::NumberStateResponse),
+                
+                StateChange::SelectStateChange(state) => 
+                    handle_state_change!(self, state, SelectStateResponse, MessageType::SelectStateResponse),
+                
+                StateChange::SirenStateChange(state) => 
+                    handle_state_change!(self, state, SirenStateResponse, MessageType::SirenStateResponse),
+                
+                StateChange::LockStateChange(state) => 
+                    handle_state_change!(self, state, LockStateResponse, MessageType::LockStateResponse),
+                
+                StateChange::AlarmControlPanelStateChange(state) => 
+                    handle_state_change!(self, state, AlarmControlPanelStateResponse, MessageType::AlarmControlPanelStateResponse),
+                
+                StateChange::TextStateChange(state) => 
+                    handle_state_change!(self, state, TextStateResponse, MessageType::TextStateResponse),
+                
+                StateChange::DateStateChange(state) => 
+                    handle_state_change!(self, state, DateStateResponse, MessageType::DateStateResponse),
+                
+                StateChange::TimeStateChange(state) => 
+                    handle_state_change!(self, state, TimeStateResponse, MessageType::TimeStateResponse),
+                
+                StateChange::EventStateChange(state) => 
+                    handle_state_change!(self, state, EventResponse, MessageType::EventResponse),
+                
+                StateChange::ValveStateChange(state) => 
+                    handle_state_change!(self, state, ValveStateResponse, MessageType::ValveStateResponse),
+                
+                StateChange::DateTimeStateChange(state) => 
+                    handle_state_change!(self, state, DateTimeStateResponse, MessageType::DateTimeStateResponse),
+                
+                StateChange::ClimateStateChange(state) => 
+                    handle_state_change!(self, state, ClimateStateResponse, MessageType::ClimateStateResponse),
             }
         }
     }
@@ -176,6 +189,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
         match msg_type {
             // Messages allowed before setup/auth
             MessageType::HelloRequest => {
+                log::info!("Handling HelloRequest, responding with name: {}", self.device_config.name);
                 let _ = HelloRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 let response = HelloResponse {
                     api_version_major: 1,
@@ -215,12 +229,14 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             MessageType::DisconnectRequest => {
                 let _ = DisconnectRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 self.send(MessageType::DisconnectResponse, &DisconnectResponse::default()).await?;
-
+                
                 log::info!("Client requested disconnect");
                 // Close the connection
             }
 
             MessageType::DeviceInfoRequest => {
+                log::info!("Handling DeviceInfoRequest, responding with name: {}, mac: {}", self.device_config.name, self.device_config.mac_address);
+                log::info!("DeviceConfig: {:?}", self.device_config);
                 let _ = DeviceInfoRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 let response = DeviceInfoResponse {
                     name: self.device_config.name,
@@ -247,69 +263,70 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::ListEntitiesRequest => {
+                log::info!("Handling ListEntitiesRequest, responding with {} entities", self.entity_configs.len());
+                //log::info!("EntityConfigs: {:?}", self.entity_configs);
                 let _ = ListEntitiesRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 for entity in self.entity_configs.iter() {
                     match entity {
-                        EntityConfig::BinarySensor(config) => {
-                            self.send::<ListEntitiesBinarySensorResponse>(MessageType::ListEntitiesBinarySensorResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Switch(config) => {
-                            self.send::<ListEntitiesSwitchResponse>(MessageType::ListEntitiesSwitchResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Sensor(config) => {
-                            self.send::<ListEntitiesSensorResponse>(MessageType::ListEntitiesSensorResponse, &config.into()).await?;
-                        },
-                        EntityConfig::TextSensor(config) => {
-                            self.send::<ListEntitiesTextSensorResponse>(MessageType::ListEntitiesTextSensorResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Cover(config) => {
-                            self.send::<ListEntitiesCoverResponse>(MessageType::ListEntitiesCoverResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Fan(config) => {
-                            self.send::<ListEntitiesFanResponse>(MessageType::ListEntitiesFanResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Light(config) => {
-                            self.send::<ListEntitiesLightResponse>(MessageType::ListEntitiesLightResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Climate(config) => {
-                            self.send::<ListEntitiesClimateResponse>(MessageType::ListEntitiesClimateResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Number(config) => {
-                            self.send::<ListEntitiesNumberResponse>(MessageType::ListEntitiesNumberResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Select(config) => {
-                            self.send::<ListEntitiesSelectResponse>(MessageType::ListEntitiesSelectResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Siren(config) => {
-                            self.send::<ListEntitiesSirenResponse>(MessageType::ListEntitiesSirenResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Lock(config) => {
-                            self.send::<ListEntitiesLockResponse>(MessageType::ListEntitiesLockResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Button(config) => {
-                            self.send::<ListEntitiesButtonResponse>(MessageType::ListEntitiesButtonResponse, &config.into()).await?;
-                        },
-                        EntityConfig::AlarmControlPanel(config) => {
-                            self.send::<ListEntitiesAlarmControlPanelResponse>(MessageType::ListEntitiesAlarmControlPanelResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Text(config) => {
-                            self.send::<ListEntitiesTextResponse>(MessageType::ListEntitiesTextResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Date(config) => {
-                            self.send::<ListEntitiesDateResponse>(MessageType::ListEntitiesDateResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Time(config) => {
-                            self.send::<ListEntitiesTimeResponse>(MessageType::ListEntitiesTimeResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Event(config) => {
-                            self.send::<ListEntitiesEventResponse>(MessageType::ListEntitiesEventResponse, &config.into()).await?;
-                        },
-                        EntityConfig::Valve(config) => {
-                            self.send::<ListEntitiesValveResponse>(MessageType::ListEntitiesValveResponse, &config.into()).await?;
-                        },
-                        EntityConfig::DateTime(config) => {
-                            self.send::<ListEntitiesDateTimeResponse>(MessageType::ListEntitiesDateTimeResponse, &config.into()).await?;
-                        },
+                        EntityConfig::BinarySensor(config) => 
+                            handle_list_entity!(self, config, ListEntitiesBinarySensorResponse, MessageType::ListEntitiesBinarySensorResponse),
+                        
+                        EntityConfig::Switch(config) => 
+                            handle_list_entity!(self, config, ListEntitiesSwitchResponse, MessageType::ListEntitiesSwitchResponse),
+                        
+                        EntityConfig::Sensor(config) => 
+                            handle_list_entity!(self, config, ListEntitiesSensorResponse, MessageType::ListEntitiesSensorResponse),
+                        
+                        EntityConfig::TextSensor(config) => 
+                            handle_list_entity!(self, config, ListEntitiesTextSensorResponse, MessageType::ListEntitiesTextSensorResponse),
+                        
+                        EntityConfig::Cover(config) => 
+                            handle_list_entity!(self, config, ListEntitiesCoverResponse, MessageType::ListEntitiesCoverResponse),
+                        
+                        EntityConfig::Fan(config) => 
+                            handle_list_entity!(self, config, ListEntitiesFanResponse, MessageType::ListEntitiesFanResponse),
+                        
+                        EntityConfig::Light(config) => 
+                            handle_list_entity!(self, config, ListEntitiesLightResponse, MessageType::ListEntitiesLightResponse),
+                        
+                        EntityConfig::Climate(config) => 
+                            handle_list_entity!(self, config, ListEntitiesClimateResponse, MessageType::ListEntitiesClimateResponse),
+                        
+                        EntityConfig::Number(config) => 
+                            handle_list_entity!(self, config, ListEntitiesNumberResponse, MessageType::ListEntitiesNumberResponse),
+                        
+                        EntityConfig::Select(config) => 
+                            handle_list_entity!(self, config, ListEntitiesSelectResponse, MessageType::ListEntitiesSelectResponse),
+                        
+                        EntityConfig::Siren(config) => 
+                            handle_list_entity!(self, config, ListEntitiesSirenResponse, MessageType::ListEntitiesSirenResponse),
+                        
+                        EntityConfig::Lock(config) => 
+                            handle_list_entity!(self, config, ListEntitiesLockResponse, MessageType::ListEntitiesLockResponse),
+                        
+                        EntityConfig::Button(config) => 
+                            handle_list_entity!(self, config, ListEntitiesButtonResponse, MessageType::ListEntitiesButtonResponse),
+                        
+                        EntityConfig::AlarmControlPanel(config) => 
+                            handle_list_entity!(self, config, ListEntitiesAlarmControlPanelResponse, MessageType::ListEntitiesAlarmControlPanelResponse),
+                        
+                        EntityConfig::Text(config) => 
+                            handle_list_entity!(self, config, ListEntitiesTextResponse, MessageType::ListEntitiesTextResponse),
+                        
+                        EntityConfig::Date(config) => 
+                            handle_list_entity!(self, config, ListEntitiesDateResponse, MessageType::ListEntitiesDateResponse),
+                        
+                        EntityConfig::Time(config) => 
+                            handle_list_entity!(self, config, ListEntitiesTimeResponse, MessageType::ListEntitiesTimeResponse),
+                        
+                        EntityConfig::Event(config) => 
+                            handle_list_entity!(self, config, ListEntitiesEventResponse, MessageType::ListEntitiesEventResponse),
+                        
+                        EntityConfig::Valve(config) => 
+                            handle_list_entity!(self, config, ListEntitiesValveResponse, MessageType::ListEntitiesValveResponse),
+                        
+                        EntityConfig::DateTime(config) => 
+                            handle_list_entity!(self, config, ListEntitiesDateTimeResponse, MessageType::ListEntitiesDateTimeResponse),
                     }
                 }
                 self.send(MessageType::ListEntitiesDoneResponse, &ListEntitiesDoneResponse::default()).await?;
@@ -319,61 +336,65 @@ impl<'a, 's> EspHomeServer<'a, 's> {
                 let _ = SubscribeStatesRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_states = true;
+                
+                self.client_event_channel.send(ClientEvent::SubscribedToStates).await?;
             }
 
             MessageType::SubscribeLogsRequest => {
                 let _ = SubscribeLogsRequest::decode(&data).map_err(|e| anyhow!(e))?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_logs = true;
+                
+                self.client_event_channel.send(ClientEvent::SubscribedToLogs).await?;
             }
 
             MessageType::SwitchCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::SwitchCommand(SwitchCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, SwitchCommand, SwitchCommandRequest),
 
             MessageType::CoverCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::CoverCommand(CoverCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, CoverCommand, CoverCommandRequest),
 
             MessageType::FanCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::FanCommand(FanCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, FanCommand, FanCommandRequest),
 
             MessageType::LightCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::LightCommand(LightCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, LightCommand, LightCommandRequest),
 
             MessageType::ClimateCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::ClimateCommand(ClimateCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, ClimateCommand, ClimateCommandRequest),
 
             MessageType::NumberCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::NumberCommand(NumberCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, NumberCommand, NumberCommandRequest),
 
             MessageType::SelectCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::SelectCommand(SelectCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, SelectCommand, SelectCommandRequest),
 
             MessageType::SirenCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::SirenCommand(SirenCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, SirenCommand, SirenCommandRequest),
 
             MessageType::LockCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::LockCommand(LockCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, LockCommand, LockCommandRequest),
 
             MessageType::ButtonCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::ButtonCommand(ButtonCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, ButtonCommand, ButtonCommandRequest),
 
             MessageType::AlarmControlPanelCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::AlarmControlPanelCommand(AlarmControlPanelCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, AlarmControlPanelCommand, AlarmControlPanelCommandRequest),
 
             MessageType::TextCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::TextCommand(TextCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, TextCommand, TextCommandRequest),
 
             MessageType::DateCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::DateCommand(DateCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, DateCommand, DateCommandRequest),
 
             MessageType::TimeCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::TimeCommand(TimeCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, TimeCommand, TimeCommandRequest),
 
             MessageType::ValveCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::ValveCommand(ValveCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, ValveCommand, ValveCommandRequest),
 
             MessageType::DateTimeCommandRequest =>
-                self.client_event_channel.send(ClientEvent::CommandReceived(Command::DateTimeCommand(DateTimeCommandRequest::decode(&data).map_err(|e| anyhow!(e))?.into()))).await?,
+                handle_command_request!(self, &data, DateTimeCommand, DateTimeCommandRequest),
 
             MessageType::SubscribeHomeassistantServicesRequest |
             MessageType::SubscribeHomeAssistantStatesRequest |
@@ -416,3 +437,4 @@ impl<'a, 's> EspHomeServer<'a, 's> {
         Ok(())
     }
 }
+
