@@ -1,10 +1,10 @@
 use anyhow::{Result, anyhow};
 use alloc::vec::Vec;
 use femtopb::{Message};
-use embassy_net::tcp::{TcpSocket, TcpReader, TcpWriter};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_net::tcp::{TcpReader, TcpWriter};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_sync::channel::{Channel, Receiver, Sender};
+use embassy_sync::channel::{Receiver, Sender};
 use crate::metadata::MessageType;
 use crate::server::ConnectionStatus;
 use crate::embassy_net::frame_reader::EspHomeFrameReader;
@@ -15,9 +15,9 @@ use crate::api::{AlarmControlPanelCommandRequest, ButtonCommandRequest, ClimateC
 
 /// ESPHome connection handler for embassy-net
 pub struct EspHomeConnection<'a> {
-    reader: Mutex<NoopRawMutex, Option<EspHomeFrameReader<'a>>>,
-    writer: Mutex<NoopRawMutex, Option<MessageSender<'a>>>,
-    pub status: Mutex<NoopRawMutex, ConnectionStatus>,
+    reader: Mutex<CriticalSectionRawMutex, Option<EspHomeFrameReader<'a>>>,
+    writer: Mutex<CriticalSectionRawMutex, Option<MessageSender<'a>>>,
+    pub status: Mutex<CriticalSectionRawMutex, ConnectionStatus>,
 }
 
 impl<'a> EspHomeConnection<'a> {
@@ -54,8 +54,8 @@ impl<'a> EspHomeConnection<'a> {
 pub struct EspHomeServer<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> {
     connection: &'c EspHomeConnection<'a>,
     device_config: &'a DeviceConfig<'a>,
-    state_change_channel: &'c Receiver<'c, NoopRawMutex, StateChange<'s>, STATE_CAPACITY>,
-    client_event_channel: &'c Sender<'c, NoopRawMutex, ClientEvent, EVENT_CAPACITY>,
+    state_change_channel: &'c Receiver<'c, CriticalSectionRawMutex, StateChange<'s>, STATE_CAPACITY>,
+    client_event_channel: &'c Sender<'c, CriticalSectionRawMutex, ClientEvent, EVENT_CAPACITY>,
     entity_configs: &'a[EntityConfig<'a>],
 }
 
@@ -90,8 +90,8 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         connection: &'c EspHomeConnection<'a>,
         device_config: &'a DeviceConfig<'a>,
         entity_configs: &'a[EntityConfig<'a>],
-        state_change_channel: &'c Receiver<'c, NoopRawMutex, StateChange<'s>, STATE_CAPACITY>,
-        client_event_channel: &'c Sender<'c, NoopRawMutex, ClientEvent, EVENT_CAPACITY>,
+        state_change_channel: &'c Receiver<'c, CriticalSectionRawMutex, StateChange<'s>, STATE_CAPACITY>,
+        client_event_channel: &'c Sender<'c, CriticalSectionRawMutex, ClientEvent, EVENT_CAPACITY>,
     ) -> Self {
         if device_config.password.is_none() {
             // Note: In embassy, we can't use lock_blocking in async context

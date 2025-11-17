@@ -99,7 +99,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
         loop {
             let state_change = self.state_change_channel.recv().await?;
 
-            let status = self.connection.status.lock().await;
+            let _status = self.connection.status.lock().await;
 /*            if !status.subscribed_to_states {
                 log::warn!("Not subscribed to states, skipping state change");
                 continue;
