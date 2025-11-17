@@ -29,6 +29,11 @@ embassy-sync = { version = "0.6.2", optional = true }
 # Common async trait
 async-trait = { version = "0.1.88", optional = true }
 
+[dev-dependencies]
+# Dependencies for embassy-net example
+embassy-executor = { version = "0.6.3", features = ["task-arena-size-32768"] }
+embassy-time = { version = "0.3.2" }
+
 [build-dependencies]
 femtopb-build = "0.8.0"
 anyhow = { version = "1.0.0" }
@@ -37,3 +42,7 @@ anyhow = { version = "1.0.0" }
 default = ["std"]
 std = ["async-io", "futures", "async-std", "env_logger", "async-trait"]
 embassy_net = ["embassy-net", "embassy-futures", "embassy-sync"]
+
+[[example]]
+name = "embassy_net_example"
+required-features = ["embassy_net"]
