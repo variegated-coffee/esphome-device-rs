@@ -15,18 +15,25 @@ femtopb = { version = "0.8.0", features = ["thiserror"] }
 anyhow = { version = "1.0.0" }
 log = "0.4.27"
 
+# std/async-std dependencies
+async-io = { version = "2.4.0", optional = true }
+futures = { version = "0.3.31", optional = true, features = ["std", "async-await"] }
+async-std = { version = "1.13.1", optional = true }
+env_logger = { version = "0.11.8", optional = true }
+
+# embassy dependencies
 embassy-net = { version = "0.7.0", features = ["tcp", "proto-ipv4", "medium-ip", "dhcpv4"], optional = true }
-async-io = "2.4.0"
-futures = "0.3.31"
-async-std = "1.13.1"
-async-trait = "0.1.88"
-env_logger = "0.11.8"
-embassy-sync = "0.6.2"
+embassy-futures = { version = "0.1.0", optional = true }
+embassy-sync = { version = "0.6.2", optional = true }
+
+# Common async trait
+async-trait = { version = "0.1.88", optional = true }
 
 [build-dependencies]
 femtopb-build = "0.8.0"
 anyhow = { version = "1.0.0" }
 
 [features]
-default = []
-embassy_net = ["embassy-net"]
+default = ["std"]
+std = ["async-io", "futures", "async-std", "env_logger", "async-trait"]
+embassy_net = ["embassy-net", "embassy-futures", "embassy-sync"]

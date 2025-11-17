@@ -24,7 +24,8 @@ use crate::entity_type::valve::{ValveCommandData, ValveConfig, ValveState};
 pub mod api;
 pub mod metadata;
 #[cfg(feature = "embassy_net")]
-mod embassy_net;
+pub mod embassy_net;
+#[cfg(feature = "std")]
 pub mod std;
 pub mod server;
 pub mod entity_type;

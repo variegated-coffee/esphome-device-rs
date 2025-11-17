@@ -1,11 +1,15 @@
-use crate::api::{AlarmControlPanelCommandRequest, ButtonCommandRequest, ClimateCommandRequest, CoverCommandRequest, DateCommandRequest, DateTimeCommandRequest, FanCommandRequest, LightCommandRequest, LockCommandRequest, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, TextCommandRequest, TimeCommandRequest, ValveCommandRequest};
 use anyhow::anyhow;
-use async_std::channel::{Receiver, Sender};
 use femtopb::Message;
-use futures::join;
 use crate::{ClientEvent, Command, DeviceConfig, EntityConfig, StateChange};
 use crate::api::{AlarmControlPanelStateResponse, BinarySensorStateResponse, ClimateStateResponse, ConnectRequest, ConnectResponse, CoverStateResponse, DateStateResponse, DateTimeStateResponse, DeviceInfoRequest, DeviceInfoResponse, DisconnectRequest, DisconnectResponse, EventResponse, FanStateResponse, HelloRequest, HelloResponse, LightStateResponse, ListEntitiesAlarmControlPanelResponse, ListEntitiesBinarySensorResponse, ListEntitiesButtonResponse, ListEntitiesClimateResponse, ListEntitiesCoverResponse, ListEntitiesDateResponse, ListEntitiesDateTimeResponse, ListEntitiesDoneResponse, ListEntitiesEventResponse, ListEntitiesFanResponse, ListEntitiesLightResponse, ListEntitiesLockResponse, ListEntitiesNumberResponse, ListEntitiesRequest, ListEntitiesSelectResponse, ListEntitiesSensorResponse, ListEntitiesSirenResponse, ListEntitiesSwitchResponse, ListEntitiesTextResponse, ListEntitiesTextSensorResponse, ListEntitiesTimeResponse, ListEntitiesValveResponse, LockStateResponse, NumberStateResponse, PingRequest, PingResponse, SelectStateResponse, SensorStateResponse, SirenStateResponse, SubscribeLogsRequest, SubscribeStatesRequest, SwitchCommandRequest, SwitchStateResponse, TextSensorStateResponse, TextStateResponse, TimeStateResponse, ValveStateResponse};
+use crate::api::{AlarmControlPanelCommandRequest, ButtonCommandRequest, ClimateCommandRequest, CoverCommandRequest, DateCommandRequest, DateTimeCommandRequest, FanCommandRequest, LightCommandRequest, LockCommandRequest, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, TextCommandRequest, TimeCommandRequest, ValveCommandRequest};
 use crate::metadata::MessageType;
+
+#[cfg(feature = "std")]
+use async_std::channel::{Receiver, Sender};
+#[cfg(feature = "std")]
+use futures::join;
+#[cfg(feature = "std")]
 use crate::std::server::EspHomeConnection;
 
 #[derive(Default)]
@@ -16,6 +20,7 @@ pub struct ConnectionStatus {
     pub subscribed_to_logs: bool,
 }
 
+#[cfg(feature = "std")]
 pub struct EspHomeServer<'a, 's> {
     connection: EspHomeConnection,
     device_config: &'a DeviceConfig<'a>,
@@ -24,6 +29,7 @@ pub struct EspHomeServer<'a, 's> {
     entity_configs: &'a[EntityConfig<'a>],
 }
 
+#[cfg(feature = "std")]
 macro_rules! handle_command_request {
     ($self:expr, $data:expr, $command_variant:ident, $request_type:ty) => {
         $self.client_event_channel.send(
@@ -38,18 +44,21 @@ macro_rules! handle_command_request {
     };
 }
 
+#[cfg(feature = "std")]
 macro_rules! handle_state_change {
     ($self:expr, $state:expr, $response_type:ty, $msg_type:expr) => {
         $self.send::<$response_type>($msg_type, &$state.into()).await?
     };
 }
 
+#[cfg(feature = "std")]
 macro_rules! handle_list_entity {
     ($self:expr, $config:expr, $response_type:ty, $msg_type:expr) => {
         $self.send::<$response_type>($msg_type, &$config.into()).await?
     };
 }
 
+#[cfg(feature = "std")]
 impl<'a, 's> EspHomeServer<'a, 's> {
     pub fn new(
         connection: EspHomeConnection,
