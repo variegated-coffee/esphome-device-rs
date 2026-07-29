@@ -1,0 +1,9 @@
+# Matches variegated-rs. Only applies to builds rooted in this repo (standalone
+# dev and CI) -- when variegated-comms-rs consumes this crate as a path
+# dependency, that workspace's toolchain is what runs.
+#
+# 1.91+ is a hard floor: the embassy-net example's smoltcp 0.13.1 dev-dependency
+# requires it.
+[toolchain]
+channel = "1.95.0"
+components = ["rust-src", "rustfmt", "clippy"]

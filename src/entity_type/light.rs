@@ -1,3 +1,4 @@
+use alloc::string::{String, ToString};
 use femtopb::EnumValue::Known;
 use femtopb::{EnumValue, Packed, Repeated, UnknownFields};
 use crate::api::{ColorMode, EntityCategory, LightCommandRequest, LightStateResponse, ListEntitiesLightResponse};

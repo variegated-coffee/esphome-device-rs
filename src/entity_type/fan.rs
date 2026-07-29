@@ -1,3 +1,4 @@
+use alloc::string::{String, ToString};
 use femtopb::EnumValue::{Known, Unknown};
 use femtopb::{Repeated, UnknownFields};
 use crate::api::{EntityCategory, FanCommandRequest, FanDirection, FanSpeed, FanStateResponse, ListEntitiesFanResponse};

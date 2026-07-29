@@ -1,6 +1,7 @@
 use embassy_net::tcp::TcpWriter;
-use anyhow::anyhow;
+use alloc::vec::Vec;
 use femtopb::Message;
+use crate::error::{EspHomeError, Result};
 use crate::metadata::MessageType;
 
 
@@ -21,7 +22,7 @@ pub fn write_varint(buffer: &mut Vec<u8>, value: u64) {
 }
 
 /// Helper function to serialize a message in ESPHome format
-pub fn serialize_message<'a, T: Message<'a>>(msg_type: MessageType, message: &T) -> anyhow::Result<Vec<u8>> {
+pub fn serialize_message<'a, T: Message<'a>>(msg_type: MessageType, message: &T) -> Result<Vec<u8>> {
     let mut buffer = Vec::new();
 
     // 1. Zero byte
@@ -33,7 +34,7 @@ pub fn serialize_message<'a, T: Message<'a>>(msg_type: MessageType, message: &T)
     message_data.resize(encoded_size, 0);
 
     // Encode the message with femtopb
-    message.encode(&mut message_data.as_mut_slice()).map_err(|e| anyhow!(e))?;
+    message.encode(&mut message_data.as_mut_slice()).map_err(|_| EspHomeError::EncodeError)?;
 
     // 2. Write size varint
     write_varint(&mut buffer, encoded_size as u64);
@@ -57,15 +58,15 @@ impl<'a> MessageSender<'a> {
     }
 
     /// Send a message to the client
-    pub async fn send<'m, M: Message<'m>>(&mut self, msg_type: MessageType, message: &'m M) -> anyhow::Result<()> {
+    pub async fn send<'m, M: Message<'m>>(&mut self, msg_type: MessageType, message: &'m M) -> Result<()> {
         let data = serialize_message(msg_type, message)?;
 
         let mut sent = 0;
         while sent < data.len() {
             match self.writer.write(&data[sent..]).await {
-                Ok(0) => return Err(anyhow!("Connection closed during send")),
+                Ok(0) => return Err(EspHomeError::ConnectionClosed),
                 Ok(n) => sent += n,
-                Err(_) => return Err(anyhow!("Connection write error")),
+                Err(_) => return Err(EspHomeError::ConnectionWriteError),
             }
         }
 

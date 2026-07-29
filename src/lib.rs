@@ -1,3 +1,9 @@
+// no_std only when the `std` backend is off. Going unconditionally `#![no_std]`
+// and adding `extern crate std` for the feature does not work here: this crate
+// already has a module named `std` (the async-std backend), and the extern
+// crate declaration collides with it at the crate root.
+#![cfg_attr(not(feature = "std"), no_std)]
+
 extern crate alloc;
 
 use crate::entity_type::alarm_control_panel::{AlarmControlPanelCommandData, AlarmControlPanelConfig, AlarmControlPanelEntityState};
@@ -22,6 +28,7 @@ use crate::entity_type::time::{TimeCommandData, TimeConfig, TimeState};
 use crate::entity_type::valve::{ValveCommandData, ValveConfig, ValveState};
 
 pub mod api;
+pub mod error;
 pub mod metadata;
 #[cfg(feature = "embassy_net")]
 pub mod embassy_net;
@@ -29,6 +36,8 @@ pub mod embassy_net;
 pub mod std;
 pub mod server;
 pub mod entity_type;
+
+pub use error::{EspHomeError, Result};
 
 #[derive(Default, Debug)]
 pub struct DeviceConfig<'a> {

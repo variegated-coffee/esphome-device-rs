@@ -1,4 +1,5 @@
-use anyhow::anyhow;
+use crate::error::{EspHomeError, Result};
+use alloc::vec::Vec;
 use femtopb::Message;
 use crate::{ClientEvent, Command, DeviceConfig, EntityConfig, StateChange};
 use crate::api::{AlarmControlPanelStateResponse, BinarySensorStateResponse, ClimateStateResponse, ConnectRequest, ConnectResponse, CoverStateResponse, DateStateResponse, DateTimeStateResponse, DeviceInfoRequest, DeviceInfoResponse, DisconnectRequest, DisconnectResponse, EventResponse, FanStateResponse, HelloRequest, HelloResponse, LightStateResponse, ListEntitiesAlarmControlPanelResponse, ListEntitiesBinarySensorResponse, ListEntitiesButtonResponse, ListEntitiesClimateResponse, ListEntitiesCoverResponse, ListEntitiesDateResponse, ListEntitiesDateTimeResponse, ListEntitiesDoneResponse, ListEntitiesEventResponse, ListEntitiesFanResponse, ListEntitiesLightResponse, ListEntitiesLockResponse, ListEntitiesNumberResponse, ListEntitiesRequest, ListEntitiesSelectResponse, ListEntitiesSensorResponse, ListEntitiesSirenResponse, ListEntitiesSwitchResponse, ListEntitiesTextResponse, ListEntitiesTextSensorResponse, ListEntitiesTimeResponse, ListEntitiesValveResponse, LockStateResponse, NumberStateResponse, PingRequest, PingResponse, SelectStateResponse, SensorStateResponse, SirenStateResponse, SubscribeLogsRequest, SubscribeStatesRequest, SwitchCommandRequest, SwitchStateResponse, TextSensorStateResponse, TextStateResponse, TimeStateResponse, ValveStateResponse};
@@ -36,7 +37,7 @@ macro_rules! handle_command_request {
             ClientEvent::CommandReceived(
                 Command::$command_variant(
                     <$request_type>::decode($data)
-                        .map_err(|e| anyhow!(e))?
+                        .map_err(|_| EspHomeError::DecodeError)?
                         .into()
                 )
             )
@@ -80,22 +81,22 @@ impl<'a, 's> EspHomeServer<'a, 's> {
         }
     }
 
-    async fn read_frame(&self) -> anyhow::Result<(MessageType, Vec<u8>)> {
+    async fn read_frame(&self) -> Result<(MessageType, Vec<u8>)> {
         self.connection.read_frame().await
     }
 
-    async fn send<'m, M: Message<'m>>(&self, msg_type: MessageType, message: &'m M) -> anyhow::Result<()> {
+    async fn send<'m, M: Message<'m>>(&self, msg_type: MessageType, message: &'m M) -> Result<()> {
         log::debug!("Sending message of type {:?}", msg_type);
         self.connection.send(msg_type, message).await
     }
 
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         let _ = join!(self.run_channel_loop(), self.run_socket_loop());
 
         Ok(())
     }
 
-    pub async fn run_channel_loop(&self) -> anyhow::Result<()> {
+    pub async fn run_channel_loop(&self) -> Result<()> {
         loop {
             let state_change = self.state_change_channel.recv().await?;
 
@@ -168,26 +169,26 @@ impl<'a, 's> EspHomeServer<'a, 's> {
         }
     }
 
-    pub async fn run_socket_loop(&self) -> anyhow::Result<()> {
+    pub async fn run_socket_loop(&self) -> Result<()> {
         loop {
             let (message_type, frame_data) = self.read_frame().await?;
             self.handle_message(message_type, frame_data).await?;
         }
     }
 
-    async fn validate_status(&self, message_type: MessageType) -> anyhow::Result<()> {
+    async fn validate_status(&self, message_type: MessageType) -> Result<()> {
         let status = self.connection.status.lock().await;
         if message_type.needs_authentication() && !status.authenticated {
-            return Err(anyhow!("Not authenticated"));
+            return Err(EspHomeError::NotAuthenticated);
         }
         if message_type.needs_setup_connection() && !status.setup_complete {
-            return Err(anyhow!("Connection not set up"));
+            return Err(EspHomeError::ConnectionNotSetup);
         }
         Ok(())
     }
 
     /// Handle an incoming message
-    async fn handle_message(&self, msg_type: MessageType, data: Vec<u8>) -> anyhow::Result<()> {
+    async fn handle_message(&self, msg_type: MessageType, data: Vec<u8>) -> Result<()> {
         log::info!("Got message type: {:?}", msg_type);
 
         if let Err(e) = self.validate_status(msg_type).await {
@@ -199,7 +200,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             // Messages allowed before setup/auth
             MessageType::HelloRequest => {
                 log::info!("Handling HelloRequest, responding with name: {}", self.device_config.name);
-                let _ = HelloRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = HelloRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let response = HelloResponse {
                     api_version_major: 1,
                     api_version_minor: 5,
@@ -214,7 +215,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::ConnectRequest => {
-                let request = ConnectRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let request = ConnectRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
 
                 let invalid_password = if let Some(password) = self.device_config.password {
                     request.password != password
@@ -236,7 +237,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::DisconnectRequest => {
-                let _ = DisconnectRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = DisconnectRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 self.send(MessageType::DisconnectResponse, &DisconnectResponse::default()).await?;
                 
                 log::info!("Client requested disconnect");
@@ -246,7 +247,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             MessageType::DeviceInfoRequest => {
                 log::info!("Handling DeviceInfoRequest, responding with name: {}, mac: {}", self.device_config.name, self.device_config.mac_address);
                 log::info!("DeviceConfig: {:?}", self.device_config);
-                let _ = DeviceInfoRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = DeviceInfoRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let response = DeviceInfoResponse {
                     name: self.device_config.name,
                     mac_address: self.device_config.mac_address,
@@ -267,14 +268,14 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::PingRequest => {
-                let _ = PingRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = PingRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 self.send(MessageType::PingResponse, &PingResponse::default()).await?;
             }
 
             MessageType::ListEntitiesRequest => {
                 log::info!("Handling ListEntitiesRequest, responding with {} entities", self.entity_configs.len());
                 //log::info!("EntityConfigs: {:?}", self.entity_configs);
-                let _ = ListEntitiesRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = ListEntitiesRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 for entity in self.entity_configs.iter() {
                     match entity {
                         EntityConfig::BinarySensor(config) => 
@@ -342,7 +343,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::SubscribeStatesRequest => {
-                let _ = SubscribeStatesRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = SubscribeStatesRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_states = true;
                 
@@ -350,7 +351,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             MessageType::SubscribeLogsRequest => {
-                let _ = SubscribeLogsRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = SubscribeLogsRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_logs = true;
                 
@@ -439,7 +440,7 @@ impl<'a, 's> EspHomeServer<'a, 's> {
             }
 
             _ => {
-                return Err(anyhow!("Unsupported message type: {:?}", msg_type));
+                return Err(EspHomeError::UnsupportedMessageType);
             }
         }
 

@@ -1,3 +1,4 @@
+use alloc::string::String;
 use femtopb::EnumValue::Known;
 use femtopb::{EnumValue, Packed, Repeated, UnknownFields};
 use crate::api::{ClimateAction, ClimateCommandRequest, ClimateFanMode, ClimateMode, ClimatePreset, ClimateStateResponse, ClimateSwingMode, EntityCategory, ListEntitiesClimateResponse};

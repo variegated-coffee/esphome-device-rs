@@ -1,7 +1,7 @@
 use std::net::TcpStream;
 use async_io::Async;
 use futures::{AsyncReadExt};
-use anyhow::{Result, anyhow};
+use crate::error::{EspHomeError, Result};
 use alloc::vec::Vec;
 use futures::io::ReadHalf;
 use crate::metadata::MessageType;
@@ -45,12 +45,12 @@ impl EspHomeFrameReader {
         
         // Read from connection
         match self.connection.read(&mut self.buffer[self.write_pos..]).await {
-            Ok(0) => return Err(anyhow!("Connection closed")),
+            Ok(0) => return Err(EspHomeError::ConnectionClosed),
             Ok(n) => {
                 self.write_pos += n;
                 Ok(n)
             },
-            Err(e) => Err(anyhow!("Connection read error: {:?}", e)),
+            Err(_) => Err(EspHomeError::ConnectionReadError),
         }
     }
 
@@ -97,7 +97,7 @@ impl EspHomeFrameReader {
 
             shift += 7;
             if shift > 63 {
-                return Err(anyhow!("Varint too long"));
+                return Err(EspHomeError::VarintTooLong);
             }
         }
 
@@ -108,7 +108,7 @@ impl EspHomeFrameReader {
         // 1. Read the zero byte
         let zero_byte = self.read_byte().await?;
         if zero_byte != 0 {
-            return Err(anyhow!("Expected zero byte, got {}", zero_byte));
+            return Err(EspHomeError::ExpectedZeroByte(zero_byte));
         }
 
         // 2. Read the size varint
@@ -117,7 +117,7 @@ impl EspHomeFrameReader {
         // 3. Read the type varint
         let type_id = self.read_varint().await? as u8;
         let message_type = MessageType::from_u8(type_id)
-            .ok_or_else(|| anyhow!("Unknown message type: {}", type_id))?;
+            .ok_or(EspHomeError::UnknownMessageType(type_id))?;
 
         // 4. Read the message payload
         let mut payload = Vec::with_capacity(size);

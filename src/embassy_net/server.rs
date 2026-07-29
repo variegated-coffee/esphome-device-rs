@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use crate::error::{EspHomeError, Result};
 use alloc::vec::Vec;
 use femtopb::{Message};
 use embassy_net::tcp::{TcpReader, TcpWriter};
@@ -37,7 +37,7 @@ impl<'a> EspHomeConnection<'a> {
         if let Some(writer) = writer_guard.as_mut() {
             writer.send(msg_type, message).await
         } else {
-            Err(anyhow::anyhow!("Writer not available"))
+            Err(EspHomeError::WriterNotAvailable)
         }
     }
 
@@ -46,7 +46,7 @@ impl<'a> EspHomeConnection<'a> {
         if let Some(reader) = reader_guard.as_mut() {
             reader.read_frame().await
         } else {
-            Err(anyhow::anyhow!("Reader not available"))
+            Err(EspHomeError::ReaderNotAvailable)
         }
     }
 }
@@ -65,7 +65,7 @@ macro_rules! handle_command_request_embassy {
             ClientEvent::CommandReceived(
                 Command::$command_variant(
                     <$request_type>::decode($data)
-                        .map_err(|e| anyhow!(e))?
+                        .map_err(|_| EspHomeError::DecodeError)?
                         .into()
                 )
             )
@@ -107,16 +107,16 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         }
     }
 
-    async fn read_frame(&self) -> anyhow::Result<(MessageType, Vec<u8>)> {
+    async fn read_frame(&self) -> Result<(MessageType, Vec<u8>)> {
         self.connection.read_frame().await
     }
 
-    async fn send<'m, M: Message<'m>>(&self, msg_type: MessageType, message: &'m M) -> anyhow::Result<()> {
+    async fn send<'m, M: Message<'m>>(&self, msg_type: MessageType, message: &'m M) -> Result<()> {
         log::debug!("Sending message of type {:?}", msg_type);
         self.connection.send(msg_type, message).await
     }
 
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         // For embassy, we can't use join! easily without executor support
         // We'll need to spawn tasks or use select! instead
         // For now, let's create a simpler version that handles one at a time
@@ -126,19 +126,19 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         Ok(())
     }
 
-    async fn validate_status(&self, message_type: MessageType) -> anyhow::Result<()> {
+    async fn validate_status(&self, message_type: MessageType) -> Result<()> {
         let status = self.connection.status.lock().await;
         if message_type.needs_authentication() && !status.authenticated {
-            return Err(anyhow!("Not authenticated"));
+            return Err(EspHomeError::NotAuthenticated);
         }
         if message_type.needs_setup_connection() && !status.setup_complete {
-            return Err(anyhow!("Connection not set up"));
+            return Err(EspHomeError::ConnectionNotSetup);
         }
         Ok(())
     }
 
     /// Handle an incoming message
-    async fn handle_message(&self, msg_type: MessageType, data: Vec<u8>) -> anyhow::Result<()> {
+    async fn handle_message(&self, msg_type: MessageType, data: Vec<u8>) -> Result<()> {
         log::info!("Got message type: {:?}", msg_type);
 
         if let Err(e) = self.validate_status(msg_type).await {
@@ -149,7 +149,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         match msg_type {
             MessageType::HelloRequest => {
                 log::info!("Handling HelloRequest, responding with name: {}", self.device_config.name);
-                let _ = HelloRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = HelloRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let response = HelloResponse {
                     api_version_major: 1,
                     api_version_minor: 5,
@@ -164,7 +164,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
             }
 
             MessageType::ConnectRequest => {
-                let request = ConnectRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let request = ConnectRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
 
                 let invalid_password = if let Some(password) = self.device_config.password {
                     request.password != password
@@ -185,7 +185,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
             }
 
             MessageType::DisconnectRequest => {
-                let _ = DisconnectRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = DisconnectRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 self.send(MessageType::DisconnectResponse, &DisconnectResponse::default()).await?;
 
                 log::info!("Client requested disconnect");
@@ -193,7 +193,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
 
             MessageType::DeviceInfoRequest => {
                 log::info!("Handling DeviceInfoRequest, responding with name: {}, mac: {}", self.device_config.name, self.device_config.mac_address);
-                let _ = DeviceInfoRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = DeviceInfoRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let response = DeviceInfoResponse {
                     name: self.device_config.name,
                     mac_address: self.device_config.mac_address,
@@ -214,13 +214,13 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
             }
 
             MessageType::PingRequest => {
-                let _ = PingRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = PingRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 self.send(MessageType::PingResponse, &PingResponse::default()).await?;
             }
 
             MessageType::ListEntitiesRequest => {
                 log::info!("Handling ListEntitiesRequest, responding with {} entities", self.entity_configs.len());
-                let _ = ListEntitiesRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = ListEntitiesRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 for entity in self.entity_configs.iter() {
                     match entity {
                         EntityConfig::BinarySensor(config) =>
@@ -288,7 +288,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
             }
 
             MessageType::SubscribeStatesRequest => {
-                let _ = SubscribeStatesRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = SubscribeStatesRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_states = true;
 
@@ -296,7 +296,7 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
             }
 
             MessageType::SubscribeLogsRequest => {
-                let _ = SubscribeLogsRequest::decode(&data).map_err(|e| anyhow!(e))?;
+                let _ = SubscribeLogsRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 let mut status = self.connection.status.lock().await;
                 status.subscribed_to_logs = true;
 
@@ -359,14 +359,14 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         Ok(())
     }
 
-    pub async fn run_socket_loop(&self) -> anyhow::Result<()> {
+    pub async fn run_socket_loop(&self) -> Result<()> {
         loop {
             let (message_type, frame_data) = self.read_frame().await?;
             self.handle_message(message_type, frame_data).await?;
         }
     }
 
-    pub async fn run_channel_loop(&self) -> anyhow::Result<()> {
+    pub async fn run_channel_loop(&self) -> Result<()> {
         loop {
             let state_change = self.state_change_channel.receive().await;
 

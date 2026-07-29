@@ -12,39 +12,46 @@ path = "src/lib.rs"
 
 [dependencies]
 femtopb = { version = "0.8.0", features = ["thiserror"] }
-anyhow = { version = "1.0.0" }
-log = "0.4.27"
+log = "0.4.33"
 
 # std/async-std dependencies
-async-io = { version = "2.4.0", optional = true }
-futures = { version = "0.3.31", optional = true, features = ["std", "async-await"] }
-async-std = { version = "1.13.1", optional = true }
-env_logger = { version = "0.11.8", optional = true }
+async-io = { version = "2.6.0", optional = true }
+futures = { version = "0.3.33", optional = true, features = ["std", "async-await"] }
+async-std = { version = "1.13.2", optional = true }
+env_logger = { version = "0.11.11", optional = true }
 
 # embassy dependencies
-embassy-net = { version = "0.7.0", features = ["tcp", "proto-ipv4", "medium-ip", "dhcpv4"], optional = true }
-embassy-futures = { version = "0.1.0", optional = true }
-embassy-sync = { version = "0.6.2", optional = true }
+embassy-net = { version = "0.9.1", features = ["tcp", "proto-ipv4", "medium-ip", "dhcpv4"], optional = true }
+embassy-futures = { version = "0.1.2", optional = true }
+embassy-sync = { version = "0.8.0", optional = true }
 
 # Common async trait
-async-trait = { version = "0.1.88", optional = true }
+async-trait = { version = "0.1.91", optional = true }
+
+# Logging for embedded consumers, which cannot use `log`'s std backends.
+defmt = { version = "1.1.1", optional = true }
 
 [dev-dependencies]
 # Dependencies for embassy-net example
-embassy-executor = { version = "0.7.0", features = ["arch-std", "executor-thread", "log"] }
-embassy-time = { version = "0.4.0", features = ["std", "generic-queue-8"] }
-smoltcp = { version = "0.12.0", features = ["proto-ipv4"] }
-env_logger = "0.11.8"
-libc = "0.2"
+# 0.10 renamed the `arch-*` features to `platform-*`.
+embassy-executor = { version = "0.10.0", features = ["platform-std", "executor-thread", "log"] }
+embassy-time = { version = "0.5.1", features = ["std", "generic-queue-8"] }
+smoltcp = { version = "0.13.1", features = ["proto-ipv4"] }
+env_logger = "0.11.11"
+libc = "0.2.189"
+# Only the examples still use anyhow; the library itself now uses
+# `error::EspHomeError` so that no_std consumers can build it.
+anyhow = "1.0.104"
 
 [build-dependencies]
 femtopb-build = "0.8.0"
-anyhow = { version = "1.0.0" }
+anyhow = { version = "1.0.104" }
 
 [features]
 default = ["std"]
 std = ["async-io", "futures", "async-std", "env_logger", "async-trait"]
 embassy_net = ["embassy-net", "embassy-futures", "embassy-sync"]
+defmt = ["dep:defmt", "embassy-net?/defmt", "embassy-sync?/defmt"]
 
 [[example]]
 name = "embassy_net_example"

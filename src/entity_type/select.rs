@@ -1,3 +1,4 @@
+use alloc::string::String;
 use femtopb::{Repeated, UnknownFields};
 use femtopb::EnumValue::Known;
 use crate::api::{EntityCategory, ListEntitiesSelectResponse, SelectCommandRequest, SelectStateResponse};

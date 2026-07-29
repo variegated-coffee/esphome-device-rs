@@ -1,3 +1,4 @@
+use alloc::string::String;
 use femtopb::EnumValue::Known;
 use femtopb::Repeated;
 use crate::api::{EntityCategory, ListEntitiesSirenResponse, SirenCommandRequest, SirenStateResponse};

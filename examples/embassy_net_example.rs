@@ -354,9 +354,9 @@ async fn main(spawner: Spawner) {
     log::info!("Listening on: 192.168.69.2:6053");
 
     // Spawn tasks
-    spawner.spawn(net_task(runner)).unwrap();
-    spawner.spawn(handle_events()).unwrap();
-    spawner.spawn(esphome_server(stack)).unwrap();
+    spawner.spawn(net_task(runner).unwrap());
+    spawner.spawn(handle_events().unwrap());
+    spawner.spawn(esphome_server(stack).unwrap());
 
     log::info!("All tasks spawned, server is running");
     log::info!("Connect ESPHome client to 192.168.69.2:6053");
