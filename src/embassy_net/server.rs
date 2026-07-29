@@ -1,4 +1,5 @@
 use crate::error::{EspHomeError, Result};
+use embassy_futures::select::{select, Either};
 use alloc::vec::Vec;
 use femtopb::{Message};
 use embassy_net::tcp::{TcpReader, TcpWriter};
@@ -93,10 +94,12 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         state_change_channel: &'c Receiver<'c, CriticalSectionRawMutex, StateChange<'s>, STATE_CAPACITY>,
         client_event_channel: &'c Sender<'c, CriticalSectionRawMutex, ClientEvent, EVENT_CAPACITY>,
     ) -> Self {
-        if device_config.password.is_none() {
-            // Note: In embassy, we can't use lock_blocking in async context
-            // This would need to be handled differently
-        }
+        // The std backend marks a password-less config authenticated here via
+        // `lock_blocking()`, which embassy_sync's Mutex does not offer. Rather
+        // than reach for `try_lock` in a constructor, `validate_status` treats
+        // "no password configured" as authenticated -- same effect, and it
+        // cannot fail. Without either, a `password: None` device would reject
+        // every request that needs authentication.
 
         Self {
             connection,
@@ -116,19 +119,25 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         self.connection.send(msg_type, message).await
     }
 
-    pub async fn run(&mut self) -> Result<()> {
-        // For embassy, we can't use join! easily without executor support
-        // We'll need to spawn tasks or use select! instead
-        // For now, let's create a simpler version that handles one at a time
-
-        // This is a simplified version - in a real implementation,
-        // you'd want to use embassy_futures::select to handle both loops concurrently
-        Ok(())
+    /// Drive the connection until either loop fails.
+    ///
+    /// The socket loop reads and dispatches inbound frames; the channel loop
+    /// pushes outbound state changes. Both run until one returns an error
+    /// (normally `ConnectionClosed`), which is what the caller uses to tear the
+    /// connection down. `select` rather than `join` because the first failure
+    /// should end the connection immediately.
+    pub async fn run(&self) -> Result<()> {
+        match select(self.run_socket_loop(), self.run_channel_loop()).await {
+            Either::First(result) => result,
+            Either::Second(result) => result,
+        }
     }
 
     async fn validate_status(&self, message_type: MessageType) -> Result<()> {
         let status = self.connection.status.lock().await;
-        if message_type.needs_authentication() && !status.authenticated {
+        // A device with no password is authenticated from the start; see `new`.
+        let authenticated = status.authenticated || self.device_config.password.is_none();
+        if message_type.needs_authentication() && !authenticated {
             return Err(EspHomeError::NotAuthenticated);
         }
         if message_type.needs_setup_connection() && !status.setup_complete {
