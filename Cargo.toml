@@ -48,11 +48,93 @@ femtopb-build = "0.8.0"
 anyhow = { version = "1.0.104" }
 
 [features]
-default = ["std"]
+default = ["std", "all-entity-types"]
 std = ["async-io", "futures", "async-std", "env_logger", "async-trait"]
 embassy_net = ["embassy-net", "embassy-futures", "embassy-sync"]
 defmt = ["dep:defmt", "embassy-net?/defmt", "embassy-sync?/defmt"]
 
+# One feature per ESPHome entity type, so a device pays only for the types it has.
+#
+# This is not a code-size nicety. `EntityConfig` and `StateChange` are enums over every type,
+# so each is as large as its *largest* variant whether or not that variant is ever built, and
+# a consumer stores those by value: an entity table is `N * size_of::<EntityConfig>()`, a
+# state queue is `N * size_of::<StateChange>()`. With everything compiled in, `EntityConfig`
+# is 120 bytes (set by `ClimateConfig`) and `StateChange` is 64 (set by `ClimateState`) --
+# where a device using only sensors, numbers, binary sensors, switches and selects needs 80
+# and about 20. On the ESP32-C6 firmware this crate was written for, that difference is about
+# 12 kB of RAM, which is the difference between running and failing to allocate.
+#
+# `default` keeps all twenty on, so adding this crate behaves as it always has. Opting down is
+# deliberate: `default-features = false` plus the types you build.
+#
+# Adding a type here means: a `pub mod` in `entity_type/mod.rs`, a `use` in `lib.rs`, a variant
+# in `EntityConfig` and (if it reports) `StateChange` and (if it accepts commands) `Command`,
+# and one arm in each of the six matches across `server.rs` and `embassy_net/server.rs`.
+all-entity-types = [
+    "alarm_control_panel",
+    "binary_sensor",
+    "button",
+    "climate",
+    "cover",
+    "date",
+    "datetime",
+    "event",
+    "fan",
+    "light",
+    "lock",
+    "number",
+    "select",
+    "sensor",
+    "siren",
+    "switch",
+    "text",
+    "text_sensor",
+    "time",
+    "valve",
+]
+
+alarm_control_panel = ["_listable", "_reportable", "_commandable"]
+binary_sensor = ["_listable", "_reportable"]
+button = ["_listable", "_commandable"]
+climate = ["_listable", "_reportable", "_commandable"]
+cover = ["_listable", "_reportable", "_commandable"]
+date = ["_listable", "_reportable", "_commandable"]
+# The module is `entity_type/datetime.rs` and the variant is `DateTime`; the feature follows
+# the module, and ESPHome itself calls the platform `datetime`.
+datetime = ["_listable", "_reportable", "_commandable"]
+event = ["_listable", "_reportable"]
+fan = ["_listable", "_reportable", "_commandable"]
+light = ["_listable", "_reportable", "_commandable"]
+lock = ["_listable", "_reportable", "_commandable"]
+number = ["_listable", "_reportable", "_commandable"]
+select = ["_listable", "_reportable", "_commandable"]
+sensor = ["_listable", "_reportable"]
+siren = ["_listable", "_reportable", "_commandable"]
+switch = ["_listable", "_reportable", "_commandable"]
+text = ["_listable", "_reportable", "_commandable"]
+text_sensor = ["_listable", "_reportable"]
+time = ["_listable", "_reportable", "_commandable"]
+valve = ["_listable", "_reportable", "_commandable"]
+
+# Internal markers -- do not enable these directly; the entity types above pull them in.
+#
+# They exist because the three `handle_*` macros and a couple of imports are shared across
+# entity types, so gating them means asking "is *any* type with this capability enabled?".
+# Cargo has no feature aliases, so without these each site would carry a sixteen-item
+# `any(feature = ..)` list that would go stale the first time a type was added.
+#
+#   _listable    every type -- each one is announced in `ListEntities`
+#   _reportable  every type except `button`, which is command-only
+#   _commandable every type except `sensor`, `binary_sensor`, `text_sensor` and `event`,
+#                which only report
+_listable = []
+_reportable = []
+_commandable = []
+
 [[example]]
 name = "embassy_net_example"
-required-features = ["embassy_net"]
+required-features = ["embassy_net", "switch", "binary_sensor"]
+
+[[example]]
+name = "basic_test"
+required-features = ["std", "switch", "binary_sensor", "cover", "fan", "light"]

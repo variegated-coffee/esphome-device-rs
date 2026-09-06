@@ -10,9 +10,62 @@ use crate::metadata::MessageType;
 use crate::server::ConnectionStatus;
 use crate::embassy_net::frame_reader::EspHomeFrameReader;
 use crate::embassy_net::message_sender::MessageSender;
-use crate::{ClientEvent, Command, DeviceConfig, EntityConfig, StateChange};
-use crate::api::{AlarmControlPanelStateResponse, BinarySensorStateResponse, ClimateStateResponse, ConnectRequest, ConnectResponse, CoverStateResponse, DateStateResponse, DateTimeStateResponse, DeviceInfoRequest, DeviceInfoResponse, DisconnectRequest, DisconnectResponse, EventResponse, FanStateResponse, HelloRequest, HelloResponse, LightStateResponse, ListEntitiesAlarmControlPanelResponse, ListEntitiesBinarySensorResponse, ListEntitiesButtonResponse, ListEntitiesClimateResponse, ListEntitiesCoverResponse, ListEntitiesDateResponse, ListEntitiesDateTimeResponse, ListEntitiesDoneResponse, ListEntitiesEventResponse, ListEntitiesFanResponse, ListEntitiesLightResponse, ListEntitiesLockResponse, ListEntitiesNumberResponse, ListEntitiesRequest, ListEntitiesSelectResponse, ListEntitiesSensorResponse, ListEntitiesSirenResponse, ListEntitiesSwitchResponse, ListEntitiesTextResponse, ListEntitiesTextSensorResponse, ListEntitiesTimeResponse, ListEntitiesValveResponse, LockStateResponse, NumberStateResponse, PingRequest, PingResponse, SelectStateResponse, SensorStateResponse, SirenStateResponse, SubscribeLogsRequest, SubscribeStatesRequest, SwitchCommandRequest, SwitchStateResponse, TextSensorStateResponse, TextStateResponse, TimeStateResponse, ValveStateResponse};
-use crate::api::{AlarmControlPanelCommandRequest, ButtonCommandRequest, ClimateCommandRequest, CoverCommandRequest, DateCommandRequest, DateTimeCommandRequest, FanCommandRequest, LightCommandRequest, LockCommandRequest, NumberCommandRequest, SelectCommandRequest, SirenCommandRequest, TextCommandRequest, TimeCommandRequest, ValveCommandRequest};
+use crate::{ClientEvent, DeviceConfig, EntityConfig, StateChange};
+#[cfg(feature = "_commandable")]
+use crate::Command;
+// The protocol messages that are not tied to an entity type.
+use crate::api::{
+    ConnectRequest, ConnectResponse, DeviceInfoRequest, DeviceInfoResponse, DisconnectRequest,
+    DisconnectResponse, HelloRequest, HelloResponse, ListEntitiesDoneResponse, ListEntitiesRequest,
+    PingRequest, PingResponse, SubscribeLogsRequest, SubscribeStatesRequest,
+};
+
+// Per-entity-type protocol messages. `api.rs` is generated and deliberately left ungated, so
+// these types always exist; the gates here are about not importing what this build's match
+// arms no longer mention.
+#[cfg(feature = "alarm_control_panel")]
+use crate::api::{
+    AlarmControlPanelCommandRequest, AlarmControlPanelStateResponse,
+    ListEntitiesAlarmControlPanelResponse,
+};
+#[cfg(feature = "binary_sensor")]
+use crate::api::{BinarySensorStateResponse, ListEntitiesBinarySensorResponse};
+#[cfg(feature = "button")]
+use crate::api::{ButtonCommandRequest, ListEntitiesButtonResponse};
+#[cfg(feature = "climate")]
+use crate::api::{ClimateCommandRequest, ClimateStateResponse, ListEntitiesClimateResponse};
+#[cfg(feature = "cover")]
+use crate::api::{CoverCommandRequest, CoverStateResponse, ListEntitiesCoverResponse};
+#[cfg(feature = "date")]
+use crate::api::{DateCommandRequest, DateStateResponse, ListEntitiesDateResponse};
+#[cfg(feature = "datetime")]
+use crate::api::{DateTimeCommandRequest, DateTimeStateResponse, ListEntitiesDateTimeResponse};
+#[cfg(feature = "event")]
+use crate::api::{EventResponse, ListEntitiesEventResponse};
+#[cfg(feature = "fan")]
+use crate::api::{FanCommandRequest, FanStateResponse, ListEntitiesFanResponse};
+#[cfg(feature = "light")]
+use crate::api::{LightCommandRequest, LightStateResponse, ListEntitiesLightResponse};
+#[cfg(feature = "lock")]
+use crate::api::{ListEntitiesLockResponse, LockCommandRequest, LockStateResponse};
+#[cfg(feature = "number")]
+use crate::api::{ListEntitiesNumberResponse, NumberCommandRequest, NumberStateResponse};
+#[cfg(feature = "select")]
+use crate::api::{ListEntitiesSelectResponse, SelectCommandRequest, SelectStateResponse};
+#[cfg(feature = "sensor")]
+use crate::api::{ListEntitiesSensorResponse, SensorStateResponse};
+#[cfg(feature = "siren")]
+use crate::api::{ListEntitiesSirenResponse, SirenCommandRequest, SirenStateResponse};
+#[cfg(feature = "switch")]
+use crate::api::{ListEntitiesSwitchResponse, SwitchCommandRequest, SwitchStateResponse};
+#[cfg(feature = "text")]
+use crate::api::{ListEntitiesTextResponse, TextCommandRequest, TextStateResponse};
+#[cfg(feature = "text_sensor")]
+use crate::api::{ListEntitiesTextSensorResponse, TextSensorStateResponse};
+#[cfg(feature = "time")]
+use crate::api::{ListEntitiesTimeResponse, TimeCommandRequest, TimeStateResponse};
+#[cfg(feature = "valve")]
+use crate::api::{ListEntitiesValveResponse, ValveCommandRequest, ValveStateResponse};
 
 /// ESPHome connection handler for embassy-net
 pub struct EspHomeConnection<'a> {
@@ -60,6 +113,10 @@ pub struct EspHomeServer<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CA
     entity_configs: &'a[EntityConfig<'a>],
 }
 
+// Each macro is used only by the arms of one of the three matches below, so each is gated on
+// whether any enabled entity type has that capability. See the internal markers in
+// `Cargo.toml`.
+#[cfg(feature = "_commandable")]
 macro_rules! handle_command_request_embassy {
     ($self:expr, $data:expr, $command_variant:ident, $request_type:ty) => {
         $self.client_event_channel.send(
@@ -74,12 +131,14 @@ macro_rules! handle_command_request_embassy {
     };
 }
 
+#[cfg(feature = "_reportable")]
 macro_rules! handle_state_change_embassy {
     ($self:expr, $state:expr, $response_type:ty, $msg_type:expr) => {
         $self.send::<$response_type>($msg_type, &$state.into()).await?
     };
 }
 
+#[cfg(feature = "_listable")]
 macro_rules! handle_list_entity_embassy {
     ($self:expr, $config:expr, $response_type:ty, $msg_type:expr) => {
         $self.send::<$response_type>($msg_type, &$config.into()).await?
@@ -232,63 +291,87 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
                 let _ = ListEntitiesRequest::decode(&data).map_err(|_| EspHomeError::DecodeError)?;
                 for entity in self.entity_configs.iter() {
                     match entity {
+                        // See the twin in `crate::server` for why this arm exists and why it
+                        // cannot run.
+                        EntityConfig::_Uninhabited(_, never) => match *never {},
+
+                        #[cfg(feature = "binary_sensor")]
                         EntityConfig::BinarySensor(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesBinarySensorResponse, MessageType::ListEntitiesBinarySensorResponse),
 
+                        #[cfg(feature = "switch")]
                         EntityConfig::Switch(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesSwitchResponse, MessageType::ListEntitiesSwitchResponse),
 
+                        #[cfg(feature = "sensor")]
                         EntityConfig::Sensor(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesSensorResponse, MessageType::ListEntitiesSensorResponse),
 
+                        #[cfg(feature = "text_sensor")]
                         EntityConfig::TextSensor(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesTextSensorResponse, MessageType::ListEntitiesTextSensorResponse),
 
+                        #[cfg(feature = "cover")]
                         EntityConfig::Cover(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesCoverResponse, MessageType::ListEntitiesCoverResponse),
 
+                        #[cfg(feature = "fan")]
                         EntityConfig::Fan(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesFanResponse, MessageType::ListEntitiesFanResponse),
 
+                        #[cfg(feature = "light")]
                         EntityConfig::Light(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesLightResponse, MessageType::ListEntitiesLightResponse),
 
+                        #[cfg(feature = "climate")]
                         EntityConfig::Climate(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesClimateResponse, MessageType::ListEntitiesClimateResponse),
 
+                        #[cfg(feature = "number")]
                         EntityConfig::Number(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesNumberResponse, MessageType::ListEntitiesNumberResponse),
 
+                        #[cfg(feature = "select")]
                         EntityConfig::Select(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesSelectResponse, MessageType::ListEntitiesSelectResponse),
 
+                        #[cfg(feature = "siren")]
                         EntityConfig::Siren(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesSirenResponse, MessageType::ListEntitiesSirenResponse),
 
+                        #[cfg(feature = "lock")]
                         EntityConfig::Lock(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesLockResponse, MessageType::ListEntitiesLockResponse),
 
+                        #[cfg(feature = "button")]
                         EntityConfig::Button(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesButtonResponse, MessageType::ListEntitiesButtonResponse),
 
+                        #[cfg(feature = "alarm_control_panel")]
                         EntityConfig::AlarmControlPanel(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesAlarmControlPanelResponse, MessageType::ListEntitiesAlarmControlPanelResponse),
 
+                        #[cfg(feature = "text")]
                         EntityConfig::Text(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesTextResponse, MessageType::ListEntitiesTextResponse),
 
+                        #[cfg(feature = "date")]
                         EntityConfig::Date(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesDateResponse, MessageType::ListEntitiesDateResponse),
 
+                        #[cfg(feature = "time")]
                         EntityConfig::Time(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesTimeResponse, MessageType::ListEntitiesTimeResponse),
 
+                        #[cfg(feature = "event")]
                         EntityConfig::Event(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesEventResponse, MessageType::ListEntitiesEventResponse),
 
+                        #[cfg(feature = "valve")]
                         EntityConfig::Valve(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesValveResponse, MessageType::ListEntitiesValveResponse),
 
+                        #[cfg(feature = "datetime")]
                         EntityConfig::DateTime(config) =>
                             handle_list_entity_embassy!(self, config, ListEntitiesDateTimeResponse, MessageType::ListEntitiesDateTimeResponse),
                     }
@@ -312,51 +395,70 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
                 self.client_event_channel.send(ClientEvent::SubscribedToLogs).await;
             }
 
+            // This match already ends in a catch-all, so removing an arm is not a compile
+            // break -- a command for a type this build does not carry is logged and dropped.
+            // A client cannot send one anyway: it only learns of entities this device listed.
+            #[cfg(feature = "switch")]
             MessageType::SwitchCommandRequest =>
                 handle_command_request_embassy!(self, &data, SwitchCommand, SwitchCommandRequest),
 
+            #[cfg(feature = "cover")]
             MessageType::CoverCommandRequest =>
                 handle_command_request_embassy!(self, &data, CoverCommand, CoverCommandRequest),
 
+            #[cfg(feature = "fan")]
             MessageType::FanCommandRequest =>
                 handle_command_request_embassy!(self, &data, FanCommand, FanCommandRequest),
 
+            #[cfg(feature = "light")]
             MessageType::LightCommandRequest =>
                 handle_command_request_embassy!(self, &data, LightCommand, LightCommandRequest),
 
+            #[cfg(feature = "climate")]
             MessageType::ClimateCommandRequest =>
                 handle_command_request_embassy!(self, &data, ClimateCommand, ClimateCommandRequest),
 
+            #[cfg(feature = "number")]
             MessageType::NumberCommandRequest =>
                 handle_command_request_embassy!(self, &data, NumberCommand, NumberCommandRequest),
 
+            #[cfg(feature = "select")]
             MessageType::SelectCommandRequest =>
                 handle_command_request_embassy!(self, &data, SelectCommand, SelectCommandRequest),
 
+            #[cfg(feature = "siren")]
             MessageType::SirenCommandRequest =>
                 handle_command_request_embassy!(self, &data, SirenCommand, SirenCommandRequest),
 
+            #[cfg(feature = "lock")]
             MessageType::LockCommandRequest =>
                 handle_command_request_embassy!(self, &data, LockCommand, LockCommandRequest),
 
+            #[cfg(feature = "button")]
             MessageType::ButtonCommandRequest =>
                 handle_command_request_embassy!(self, &data, ButtonCommand, ButtonCommandRequest),
 
+            #[cfg(feature = "alarm_control_panel")]
             MessageType::AlarmControlPanelCommandRequest =>
                 handle_command_request_embassy!(self, &data, AlarmControlPanelCommand, AlarmControlPanelCommandRequest),
 
+            #[cfg(feature = "text")]
             MessageType::TextCommandRequest =>
                 handle_command_request_embassy!(self, &data, TextCommand, TextCommandRequest),
 
+            #[cfg(feature = "date")]
             MessageType::DateCommandRequest =>
                 handle_command_request_embassy!(self, &data, DateCommand, DateCommandRequest),
 
+            #[cfg(feature = "time")]
             MessageType::TimeCommandRequest =>
                 handle_command_request_embassy!(self, &data, TimeCommand, TimeCommandRequest),
 
+            #[cfg(feature = "valve")]
             MessageType::ValveCommandRequest =>
                 handle_command_request_embassy!(self, &data, ValveCommand, ValveCommandRequest),
 
+            #[cfg(feature = "datetime")]
             MessageType::DateTimeCommandRequest =>
                 handle_command_request_embassy!(self, &data, DateTimeCommand, DateTimeCommandRequest),
 
@@ -379,61 +481,83 @@ impl<'a, 's, 'c, const STATE_CAPACITY: usize, const EVENT_CAPACITY: usize> EspHo
         loop {
             let state_change = self.state_change_channel.receive().await;
 
+            // One arm per enabled entity type. `_Uninhabited` needs none here: this match is
+            // by value, so `min_exhaustive_patterns` sees the `Infallible` and does not ask
+            // for it -- unlike the `&EntityConfig` match above.
             match state_change {
+                #[cfg(feature = "binary_sensor")]
                 StateChange::BinarySensorChange(state) =>
                     handle_state_change_embassy!(self, state, BinarySensorStateResponse, MessageType::BinarySensorStateResponse),
 
+                #[cfg(feature = "cover")]
                 StateChange::CoverChange(state) =>
                     handle_state_change_embassy!(self, state, CoverStateResponse, MessageType::CoverStateResponse),
 
+                #[cfg(feature = "switch")]
                 StateChange::SwitchStateChange(state) =>
                     handle_state_change_embassy!(self, state, SwitchStateResponse, MessageType::SwitchStateResponse),
 
+                #[cfg(feature = "fan")]
                 StateChange::FanStateChange(state) =>
                     handle_state_change_embassy!(self, state, FanStateResponse, MessageType::FanStateResponse),
 
+                #[cfg(feature = "light")]
                 StateChange::LightStateChange(state) =>
                     handle_state_change_embassy!(self, state, LightStateResponse, MessageType::LightStateResponse),
 
+                #[cfg(feature = "sensor")]
                 StateChange::SensorStateChange(state) =>
                     handle_state_change_embassy!(self, state, SensorStateResponse, MessageType::SensorStateResponse),
 
+                #[cfg(feature = "text_sensor")]
                 StateChange::TextSensorStateChange(state) =>
                     handle_state_change_embassy!(self, state, TextSensorStateResponse, MessageType::TextSensorStateResponse),
 
+                #[cfg(feature = "number")]
                 StateChange::NumberStateChange(state) =>
                     handle_state_change_embassy!(self, state, NumberStateResponse, MessageType::NumberStateResponse),
 
+                #[cfg(feature = "select")]
                 StateChange::SelectStateChange(state) =>
                     handle_state_change_embassy!(self, state, SelectStateResponse, MessageType::SelectStateResponse),
 
+                #[cfg(feature = "siren")]
                 StateChange::SirenStateChange(state) =>
                     handle_state_change_embassy!(self, state, SirenStateResponse, MessageType::SirenStateResponse),
 
+                #[cfg(feature = "lock")]
                 StateChange::LockStateChange(state) =>
                     handle_state_change_embassy!(self, state, LockStateResponse, MessageType::LockStateResponse),
 
+                #[cfg(feature = "alarm_control_panel")]
                 StateChange::AlarmControlPanelStateChange(state) =>
                     handle_state_change_embassy!(self, state, AlarmControlPanelStateResponse, MessageType::AlarmControlPanelStateResponse),
 
+                #[cfg(feature = "text")]
                 StateChange::TextStateChange(state) =>
                     handle_state_change_embassy!(self, state, TextStateResponse, MessageType::TextStateResponse),
 
+                #[cfg(feature = "date")]
                 StateChange::DateStateChange(state) =>
                     handle_state_change_embassy!(self, state, DateStateResponse, MessageType::DateStateResponse),
 
+                #[cfg(feature = "time")]
                 StateChange::TimeStateChange(state) =>
                     handle_state_change_embassy!(self, state, TimeStateResponse, MessageType::TimeStateResponse),
 
+                #[cfg(feature = "event")]
                 StateChange::EventStateChange(state) =>
                     handle_state_change_embassy!(self, state, EventResponse, MessageType::EventResponse),
 
+                #[cfg(feature = "valve")]
                 StateChange::ValveStateChange(state) =>
                     handle_state_change_embassy!(self, state, ValveStateResponse, MessageType::ValveStateResponse),
 
+                #[cfg(feature = "datetime")]
                 StateChange::DateTimeStateChange(state) =>
                     handle_state_change_embassy!(self, state, DateTimeStateResponse, MessageType::DateTimeStateResponse),
 
+                #[cfg(feature = "climate")]
                 StateChange::ClimateStateChange(state) =>
                     handle_state_change_embassy!(self, state, ClimateStateResponse, MessageType::ClimateStateResponse),
             }
